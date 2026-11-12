@@ -1,14 +1,15 @@
 {
   "name": "D&D Table",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "manifest_version": 1,
   "description": "Our D&D 5e (2024) table: character sheets, dice, combat, monsters, items and scenarios. DM and player versions.",
   "author": "Our table",
-  "icon": "icon.svg",
+  "homepage_url": "https://maxim213.github.io/dnd-table/",
+  "icon": "https://maxim213.github.io/dnd-table/icon.svg",
   "action": {
     "title": "D&D Table",
-    "icon": "icon.svg",
-    "popover": "index.html",
+    "icon": "https://maxim213.github.io/dnd-table/icon.svg",
+    "popover": "https://maxim213.github.io/dnd-table/index.html",
     "width": 440,
     "height": 760
   },
