@@ -37,9 +37,10 @@
 
   // 1. Are we inside Owlbear Rodeo? Then ask it who we are.
   async function owlbear() {
-    if (window.parent === window) return null; // opened directly, not inside Owlbear
+    const fake = new URLSearchParams(location.search).get('fakeobr'); // local test only: _dev/fakeobr.js (not published)
+    if (window.parent === window && !fake) return null; // opened directly, not inside Owlbear
     try {
-      const OBR = (await import(SDK)).default;
+      const OBR = fake ? (await import('./_dev/fakeobr.js')).default(fake, new URLSearchParams(location.search).get('name') || fake) : (await import(SDK)).default;
       await new Promise((ok, bad) => { if (OBR.isReady) ok(); else OBR.onReady(ok); setTimeout(() => bad(new Error('Owlbear did not answer')), 10000); });
       window.OBR = OBR;
       return await OBR.player.getRole(); // 'GM' | 'PLAYER'

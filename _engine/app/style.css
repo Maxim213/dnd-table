@@ -508,3 +508,17 @@ details.passive summary small { color: var(--dim); margin-left: 6px; }
   .tb { padding: 2px 6px; }
 }
 .obrtag { font-size: 11px; color: var(--dim); margin-left: 4px; }
+/* online: player's read-only fight, remote roll tag */
+.obrlist { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 14px; }
+.obrrow { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line, #3a3125); border-radius: 8px; background: rgba(0,0,0,.18); }
+.obrrow .ini { min-width: 2em; text-align: center; font-family: var(--head); color: var(--gold2); font-size: 18px; }
+.obrrow .who { flex: 1; min-width: 0; }
+.obrrow.act { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; background: rgba(217,164,65,.12); }
+.obrrow.me b { color: var(--gold2); }
+.obrrow.mon .who b { color: #e7b4ad; }
+.obrrow .hpbar { height: 6px; background: #2a221a; border-radius: 4px; overflow: hidden; margin: 4px 0 2px; }
+.obrrow .hpbar i { display: block; height: 100%; background: linear-gradient(90deg, #b44, #5cb85c); }
+.obrrow .conds { color: #e9a86b; }
+#side .from, .log .from { display: inline-block; font-size: 11px; color: var(--dim); margin-right: 6px; }
+nav button.live { border-color: #b44; }
+nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(--gold2); animation: dpop 1s ease-in-out infinite alternate; }

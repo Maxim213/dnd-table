@@ -74,3 +74,10 @@ No multiclassing and no live sync yet (files go through Discord). Levels 4–20:
 - Data inside Owlbear is saved in the browser separately from the offline files: move a game once with 💾 Save file → 🎲 Load game from file.
 - This folder is a git repository. Publish it with GitHub Desktop (public repo) and turn on Settings → Pages → branch `main`, folder `/ (root)`. Extension link: `https://<user>.github.io/<repo>/manifest.json`.
 - Coming next: sync between players, token cards (click a token → card), music for everyone.
+
+### Sync between the DM and the players (stage 3)
+- `bg.html` + `_engine/app/obr-bg.js` = the extension's **background page** (runs while the room is open, even with the panel closed). It sends and receives through Owlbear; the panel only saves to the browser storage as usual (`online.js` marks what changed).
+- **Rolls:** every log line goes to everyone (tag 🦉 player / 🎲 DM) and pops up as an Owlbear notification when the panel is closed. DM: 👁 / 🙈 in the top bar shows or hides your rolls (hidden ones are never sent).
+- **Heroes:** a player's heroes appear in the DM's open game automatically (tag `obr`). Whoever changes a hero last wins: damage from the DM reaches the player's sheet, the player's own changes reach the DM.
+- **Fight:** the DM's fight is summarised in the room (order, round, heroes' HP, monsters only as 🟢 Unhurt … 💀 Down). Players get **⚔️ Fight** in their menu, "⚔️ Your turn!" notifications and a "!" badge on the icon.
+- Local test without Owlbear: `_dev/sim.html` (DM + one player in one page, fake SDK in `_dev/fakeobr.js`; `_dev/` is not published).
