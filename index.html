@@ -35,35 +35,51 @@
   const say = html => { document.getElementById('main').innerHTML = '<div class="emptybig">' + html + '</div>'; };
   const load = src => new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('Cannot load ' + src)); document.body.appendChild(s); });
 
-  // 1. Are we inside Owlbear Rodeo? Then ask it who we are.
+  const limit = (p, ms, what) => Promise.race([p, new Promise((_, bad) => setTimeout(() => bad(new Error(what + ': no answer in ' + ms / 1000 + ' s')), ms))]);
+  const fake = new URLSearchParams(location.search).get('fakeobr'); // local test only: _dev/fakeobr.js (not published)
+  const inFrame = window.parent !== window || !!fake; // inside Owlbear (or the local fake)
+  let obrError = '';
+
+  // 1. Are we inside Owlbear Rodeo? Then ask it who we are (2 tries, so a slow start doesn't break the sync)
   async function owlbear() {
-    const fake = new URLSearchParams(location.search).get('fakeobr'); // local test only: _dev/fakeobr.js (not published)
-    if (window.parent === window && !fake) return null; // opened directly, not inside Owlbear
+    if (!inFrame) return null; // opened directly, not inside Owlbear
+    let OBR;
     try {
-      const OBR = fake ? (await import('./_dev/fakeobr.js')).default(fake, new URLSearchParams(location.search).get('name') || fake) : (await import(SDK)).default;
-      await new Promise((ok, bad) => { if (OBR.isReady) ok(); else OBR.onReady(ok); setTimeout(() => bad(new Error('Owlbear did not answer')), 10000); });
-      window.OBR = OBR;
-      return await OBR.player.getRole(); // 'GM' | 'PLAYER'
-    } catch (e) { console.warn('Owlbear SDK:', e); return null; }
+      say('<p>🦉 Owlbear…</p>');
+      OBR = fake ? (await import('./_dev/fakeobr.js')).default(fake, new URLSearchParams(location.search).get('name') || fake) : (await limit(import(SDK), 15000, 'Owlbear SDK download')).default;
+    } catch (e) { obrError = String(e.message || e); return null; }
+    for (let i = 1; i <= 2; i++) {
+      try {
+        say('<p>🦉 Owlbear… ' + (i > 1 ? '(2)' : '') + '</p>');
+        await limit(new Promise(ok => { if (OBR.isReady) ok(); else OBR.onReady(ok); }), 12000, 'Owlbear connection');
+        window.OBR = OBR;
+        return await limit(OBR.player.getRole(), 8000, 'Owlbear role'); // 'GM' | 'PLAYER'
+      } catch (e) { console.warn('Owlbear SDK:', e); obrError = String(e.message || e); }
+    }
+    return null;
   }
-  // 2. Outside Owlbear: ask once (DM or player), remember the answer
+  // 2. Outside Owlbear: ask once (DM or player), remember the answer.
+  //    Inside Owlbear when the connection failed: say so (no silent fallback: without Owlbear nothing syncs).
   function pickRole() {
     const q = new URLSearchParams(location.search).get('mode');
     if (q === 'player' || q === 'dm') return Promise.resolve(q);
     let saved = ''; try { saved = localStorage.getItem('dnd.onlineRole') || ''; } catch (e) {}
-    if (saved) return Promise.resolve(saved);
+    if (saved && !inFrame) return Promise.resolve(saved);
     return new Promise(ok => {
-      say('<h2>🐉 D&amp;D Table</h2><p>Кто ты? / Who are you?</p><p class="btnrow" style="justify-content:center">' +
+      say((inFrame ? '<p>⚠️ <b>Не удалось связаться с Owlbear</b> — без этого ничего не синхронизируется.<br><small>' + obrError.replace(/</g, '&lt;') + '</small></p>' +
+          '<p class="btnrow" style="justify-content:center"><button class="primary" id="retry">🔄 Повторить / Retry</button></p><p class="hint">Или открыть без синхронизации:</p>' : '') +
+        '<h2>🐉 D&amp;D Table</h2><p>Кто ты? / Who are you?</p><p class="btnrow" style="justify-content:center">' +
         '<button class="primary" id="roleDm">🎲 Мастер / DM</button><button class="primary" id="rolePl">🧙 Игрок / Player</button></p>' +
         '<p class="hint">Внутри Owlbear Rodeo это определяется само. / Inside Owlbear Rodeo this is automatic.</p>');
-      const set = r => () => { try { localStorage.setItem('dnd.onlineRole', r); } catch (e) {} ok(r); };
+      const set = r => () => { if (!inFrame) try { localStorage.setItem('dnd.onlineRole', r); } catch (e) {} ok(r); };
       document.getElementById('roleDm').onclick = set('dm'); document.getElementById('rolePl').onclick = set('player');
+      const rt = document.getElementById('retry'); if (rt) rt.onclick = () => location.reload();
     });
   }
   (async () => {
     const role = await owlbear();
     const mode = role ? (role === 'GM' ? 'dm' : 'player') : await pickRole();
-    window.ONLINE = { owlbear: !!role, role: role || '', mode };
+    window.ONLINE = { owlbear: !!role, role: role || '', mode, noSync: inFrame && !role };
     if (mode === 'player') window.APP_MODE = 'player';
     // 3. the app scripts, in the same order as DnD_Game_DM.html
     try {

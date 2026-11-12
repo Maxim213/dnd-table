@@ -32,7 +32,14 @@
   U.ACT.panelSize = () => { applySize(getSize() === 'wide' ? 'narrow' : 'wide').then(() => U.renderTop()); };
   U.ACT.hideRolls = () => { try { localStorage.setItem('dnd.hideRolls', hideRolls() ? '0' : '1'); } catch (e) {} U.renderTop(); U.toast(hideRolls() ? '🙈 ' + T('Your rolls are hidden from the players.') : '👁 ' + T('Players see your rolls.')); };
 
-  if (!ON.owlbear) { window.ONLINE_START = () => { document.body.classList.add('online-direct'); U.renderTop(); }; return; }
+  if (!ON.owlbear) {
+    if (ON.noSync) { // inside Owlbear but no connection: say it loudly
+      const t0 = U.renderTop; U.renderTop = function () { t0(); const el = document.getElementById('topCtl'); if (el) el.insertAdjacentHTML('afterbegin', '<button class="tb sync-off" data-act="reconnect" title="' + esc(T('No connection to Owlbear: nothing syncs. Click to reconnect.')) + '">⚠️</button>'); };
+      U.ACT.reconnect = () => location.reload();
+    }
+    window.ONLINE_START = () => { document.body.classList.add('online-direct'); U.renderTop(); if (ON.noSync) U.toast('⚠️ ' + T('No connection to Owlbear: nothing syncs. Click to reconnect.')); };
+    return;
+  }
 
   // ---------- 1. log lines get an id (so the background page sends each one once) ----------
   const baseSaveLog = U.saveLog;
