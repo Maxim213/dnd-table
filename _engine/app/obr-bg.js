@@ -8,7 +8,10 @@
 //   • broadcast 'heroSet' — the DM changed a player's hero (damage, conditions, level…) → the owner's copy updates
 //   • player metadata     — each player's heroes (the DM's game picks them up automatically)
 //   • room metadata       — the fight summary from the DM (who is in it, whose turn, HP / health of monsters)
-export function startBackground(OBR) {
+// by = 'bg' (the background page) or 'panel' (the panel runs it itself when the background page is missing).
+// In 'panel' mode the panel's own saves don't fire "storage" events here, so online.js calls window.__obrSync.key(fullKey).
+export function startBackground(OBR, by) {
+  by = by || 'bg';
   const CH = 'dndtable/v1', ROOM = 'dndtable/state', HEROES = 'dndtable/heroes';
   const ruOn = () => { try { return (localStorage.getItem('dnd.lang') || 'ru') === 'ru'; } catch (e) { return true; } };
   const tr = (en, ru) => (ruOn() ? ru : en);
@@ -18,7 +21,12 @@ export function startBackground(OBR) {
     const DM = role === 'GM';
     const P = DM ? 'dndt.' : 'dndp.';
     const get = (k, d) => { try { const v = localStorage.getItem(P + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
-    const set = (k, v) => { try { localStorage.setItem(P + k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+    const set = (k, v) => {
+      try { localStorage.setItem(P + k, JSON.stringify(v)); } catch (e) { return false; }
+      // inside the panel nobody else gets a "storage" event for this write → send one to the panel ourselves
+      if (by === 'panel') setTimeout(() => window.dispatchEvent(new StorageEvent('storage', { key: P + k })), 0);
+      return true;
+    };
     const game = () => (DM ? get('curGame', null) : '');
     const gk = k => (DM ? 'g.' + game() + '.' + k : k); // the DM's data lives inside the open game
     const myName = async () => { try { return await OBR.player.getName(); } catch (e) { return ''; } };
@@ -148,16 +156,29 @@ export function startBackground(OBR) {
       OBR.room.getMetadata().then(md => takeState((md || {})[ROOM])).catch(() => {});
       publishHeroes();
     }
-    window.addEventListener('storage', e => {
-      const k = e.key || '';
+    const onKey = k => {
+      k = k || '';
       if (!k.startsWith(P)) return;
       const rest = k.slice(P.length);
       if (DM && rest === 'curGame') { seen = snapshot(get(gk('chars'), [])); mergeHeroes(); return; }
       if (rest === gk('log')) sendNewLog();
       if (rest === gk('chars')) { if (DM) sendHeroChanges(); else publishHeroes(); }
       if (DM && rest === 'obrstate') publishState();
-    });
+      if (rest === 'resyncReq' && by === 'bg') resync(); // the 🟢 button in the panel
+    };
+    window.addEventListener('storage', e => onKey(e.key));
+    // "alive" mark: the panel checks it to know whether the background page works (🟢) or it must sync itself (🟡)
+    const beat = () => { try { localStorage.setItem(P + 'syncAlive', JSON.stringify({ t: Date.now(), by })); } catch (e) {} };
+    beat(); setInterval(beat, 4000);
+    // resend everything (the 🟢 / 🟡 button in the panel)
+    const resync = async () => {
+      if (DM) { lastState = ''; await publishState(); try { mergeHeroes(await OBR.party.getPlayers()); } catch (e) {} }
+      else { await publishHeroes(); try { takeState(((await OBR.room.getMetadata()) || {})[ROOM]); } catch (e) {} }
+      await sendNewLog();
+      return true;
+    };
+    window.__obrSync = { by, role, key: onKey, resync };
     sendNewLog();
-    console.log('D&D Table background ready:', role);
+    console.log('D&D Table sync ready:', role, by);
   });
 }

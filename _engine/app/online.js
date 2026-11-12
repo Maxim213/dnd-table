@@ -36,7 +36,9 @@
 
   // ---------- 1. log lines get an id (so the background page sends each one once) ----------
   const baseSaveLog = U.saveLog;
-  U.saveLog = function () { (S.log || []).forEach(e => { if (e && !e.id) { e.id = E.uid(); if (!e.remote) e.mine = 1; } }); return baseSaveLog(); };
+  U.saveLog = function () { (S.log || []).forEach(e => { if (e && !e.id) { e.id = E.uid(); if (!e.remote) e.mine = 1; } }); const r = baseSaveLog(); local('log'); return r; };
+  // when the panel itself runs the sync (no background page), tell it about our own saves (no "storage" event for them)
+  const local = k => { const s = window.__obrSync; if (s && s.by === 'panel') setTimeout(() => s.key(P + (k === 'obrstate' ? k : gk(k))), 0); };
 
   // ---------- 2. heroes get "upd" when they change (newest copy wins between DM and player) ----------
   const sig = c => { const x = Object.assign({}, c); delete x.upd; delete x.portrait; delete x.obr; return JSON.stringify(x); };
@@ -46,7 +48,7 @@
   U.saveChars = function () {
     const now = Date.now();
     (S.chars || []).forEach(c => { const s = sig(c); if (sigs[c.id] !== s) { c.upd = now; sigs[c.id] = s; } });
-    const r = baseSaveChars(); queueState(); return r;
+    const r = baseSaveChars(); local('chars'); queueState(); return r;
   };
 
   // ---------- 3. DM: a short fight summary for the players (room metadata, through the background page) ----------
@@ -72,7 +74,7 @@
   function queueState() {
     if (!U.DM) return;
     clearTimeout(stT);
-    stT = setTimeout(() => { const st = summary(); const s = JSON.stringify(st); if (s !== lastSt) { lastSt = s; U.raw.set('obrstate', st); } }, 250);
+    stT = setTimeout(() => { const st = summary(); const s = JSON.stringify(st); if (s !== lastSt) { lastSt = s; U.raw.set('obrstate', st); local('obrstate'); } }, 250);
   }
   const baseSaveCombat = U.saveCombat;
   U.saveCombat = function () { const r = baseSaveCombat(); queueState(); return r; };
@@ -118,10 +120,37 @@
     b.classList.toggle('live', !!(st && st.on)); b.classList.toggle('myturn', !!(a && a.cid && mine.has(a.cid)));
   }
 
+  // ---------- 6. is the background page alive? If not, the panel syncs itself (while it is open) ----------
+  let syncMode = 'wait'; // 'bg' 🟢 | 'panel' 🟡 | 'wait' ⏳ | 'off' 🔴
+  const bgAlive = () => { const a = U.raw.get('syncAlive', null); return !!(a && a.by === 'bg' && Date.now() - a.t < 12000); };
+  async function checkSync() {
+    if (bgAlive()) { syncMode = 'bg'; U.renderTop(); return; }
+    await new Promise(r => setTimeout(r, 3000));
+    if (bgAlive()) { syncMode = 'bg'; U.renderTop(); return; }
+    try { const m = await import(new URL('_engine/app/obr-bg.js', document.baseURI).href); /* absolute: a classic script resolves import() from its own folder */ m.startBackground(OBR, 'panel'); syncMode = 'panel'; }
+    catch (e) { console.warn('sync', e); syncMode = 'off'; }
+    U.renderTop();
+  }
+  const SYNC = { bg: ['🟢', 'Sync is on (background page). Click to send everything again.'], panel: ['🟡', 'Sync works only while this panel is open: reinstall the extension (manifest.json?v=…) to get the background page. Click to send everything again.'], wait: ['⏳', 'Connecting…'], off: ['🔴', 'Sync is off. Reload the page.'] };
+  const topWithSync = U.renderTop;
+  U.renderTop = function () {
+    topWithSync();
+    const el = document.getElementById('topCtl'); if (!el) return;
+    const s = SYNC[syncMode] || SYNC.wait;
+    el.insertAdjacentHTML('afterbegin', '<button class="tb sync-' + syncMode + '" data-act="resync" title="' + esc(T(s[1])) + '">' + s[0] + '</button>');
+  };
+  U.ACT.resync = async () => {
+    const s = window.__obrSync;
+    if (syncMode === 'bg') U.raw.set('resyncReq', Date.now()); // the background page does it
+    else if (s) await s.resync();
+    else { U.toast(T(SYNC[syncMode][1])); return; } U.toast('🔄 ' + T('Sent everything again.') + (syncMode === 'panel' ? '<br><small>' + esc(T(SYNC.panel[1])) + '</small>' : ''));
+  };
+
   window.ONLINE_START = function () {
     document.body.classList.add('in-obr');
     applySize(getSize());
     remember();
+    checkSync();
     if (U.PLAYER) {
       const nav = document.querySelector('header.top nav');
       if (nav && !nav.querySelector('[data-v="obrfight"]')) nav.insertAdjacentHTML('afterbegin', '<button data-act="nav" data-v="obrfight">⚔️ ' + esc(T('Fight')) + '</button>');
