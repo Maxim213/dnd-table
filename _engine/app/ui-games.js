@@ -95,6 +95,7 @@
       const g = U.games.find(x => x.id === ds.id);
       U.download(U.fileName(g.name) + '.game.json', U.gameFile(g.id));
       U.toast(T('💾 Saved to Downloads as <b>{0}.game.json</b> — move it to <code>Campaigns/{0}/</code>.', esc(U.fileName(g.name))));
+      U.markSaved(g.id);
     },
     gameRename: ds => {
       const g = U.games.find(x => x.id === ds.id); const n = prompt(T('New name for this game:'), g.name);
@@ -133,4 +134,30 @@
     };
     rd.readAsText(file); e.target.value = '';
   });
+
+  // ---------- reminder to save the game to a file (DM): once an hour if something changed ----------
+  // "Save now" downloads the file, "In an hour" waits, "auto" saves by itself every hour (dnd.autoSave = '1').
+  const SAVED = 'dnd.saved.', SNOOZE = 'dnd.saveSnooze', AUTO = 'dnd.autoSave', HOUR = 60 * 60 * 1000;
+  const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, String(v)); } catch (e) {} } };
+  const opened = Date.now();
+  U.markSaved = id => { ls.set(SAVED + id, Date.now()); ls.set(SNOOZE, 0); };
+  U.saveReminder = function (force) {
+    if (!U.DM || !U.game) return;
+    const g = U.game; const saved = Number(ls.get(SAVED + g.id)) || 0; const now = Date.now();
+    const changed = (g.updated || 0) > saved;
+    const due = now - Math.max(saved, opened) >= HOUR && now >= (Number(ls.get(SNOOZE)) || 0);
+    if (!force && !(changed && due)) return;
+    if (ls.get(AUTO) === '1') { U.ACT.gameSave({ id: g.id }); U.toast('💾 ' + T('Autosave: the game was saved to Downloads.')); return; }
+    const pop = document.getElementById('pop'); if (!pop || pop.classList.contains('show')) return; // don't cover another window
+    const mins = Math.round((now - Math.max(saved, opened)) / 60000);
+    pop.innerHTML = '<div class="popcard" role="dialog"><h3>⏰ ' + T('Time to save the game') + '</h3>' +
+      '<p>' + T('{0} min since the last save of “{1}”. Save the game to a file so nothing is lost if the browser data is cleared.', mins, esc(g.name)) + '</p>' +
+      '<p class="btnrow"><button class="primary" data-act="saveNow">💾 ' + T('Save now') + '</button><button data-act="saveLater">⏰ ' + T('In an hour') + '</button></p>' +
+      '<p><label class="inl"><input type="checkbox" data-on="autoSave"' + (ls.get(AUTO) === '1' ? ' checked' : '') + '> ' + T('Save by itself every hour (no question)') + '</label></p></div>';
+    pop.classList.add('show');
+  };
+  U.ACT.saveNow = () => { document.getElementById('pop').classList.remove('show'); if (U.game) U.ACT.gameSave({ id: U.game.id }); };
+  U.ACT.saveLater = () => { ls.set(SNOOZE, Date.now() + HOUR); document.getElementById('pop').classList.remove('show'); U.toast('⏰ ' + T('OK, I will remind you in an hour.')); };
+  U.ON.autoSave = el => { ls.set(AUTO, el.checked ? '1' : '0'); U.toast(el.checked ? '💾 ' + T('Autosave is on: every hour the game file downloads by itself.') : T('Autosave is off.')); };
+  setInterval(() => U.saveReminder(false), 60 * 1000);
 })(window.UI);

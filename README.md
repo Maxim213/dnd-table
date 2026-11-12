@@ -89,4 +89,5 @@ No multiclassing and no live sync yet (files go through Discord). Levels 4–20:
   DM: link the token to a hero or a monster in the fight, see real numbers, − Damage / + Heal for monsters, 🎯 make it the target of whoever acts now, ✂️ unlink.
   Player: heroes (HP, AC), monsters only as Unhurt … Down, and **attack the monster right from its card** (with Advantage / Disadvantage).
   Tokens named exactly like a hero or a fight monster link themselves. A **gold ring** follows whoever's turn it is.
+- **⏰ Save reminder (DM):** once an hour, if the game changed since the last 💾, a window asks to save it to a file: 💾 Save now / ⏰ In an hour, or tick "save by itself every hour" (then the file downloads with no question; `dnd.autoSave`).
 - **🎼 Table music** (`_engine/app/table-music.js`): the DM picks one of 8 moods (made in the browser, no files) or pastes a YouTube link; it plays for everyone (in the background page, so even with the panel closed) and everyone sets their own volume / mute. If a browser blocks the sound, 🎼 → "Play it here".
