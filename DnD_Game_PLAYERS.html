@@ -502,6 +502,19 @@ details.passive summary small { color: var(--dim); margin-left: 6px; }
 #diceAnim.many .d20 { width: 46px; height: 52px; }
 #diceAnim.many .d20.f6 { width: 44px; height: 44px; }
 #diceAnim.many .d20 span { font-size: 18px; }
+/* narrow screens: the Owlbear panel (440 px) and phones */
+@media (max-width: 560px) {
+  .top { padding: 6px 10px; gap: 6px; position: static; }
+  .brand { font-size: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .brand .modetag { font-size: 11px; padding: 1px 6px; }
+  .top nav { gap: 4px; width: 100%; }
+  .top nav button { padding: 4px 8px; font-size: 13px; }
+  .wrap { padding: 8px; gap: 8px; }
+  h1 { font-size: 21px; } h2 { font-size: 18px; }
+  .ph { flex-wrap: wrap; gap: 6px; }
+  .tb { padding: 2px 6px; }
+}
+.obrtag { font-size: 11px; color: var(--dim); margin-left: 4px; }
 
 </style>
 </head>
@@ -5545,6 +5558,10 @@ window.DND_RU.UI = {
   'Advantage: the higher die counts': 'Преимущество: считается больший кубик',
   'Disadvantage: the lower die counts': 'Помеха: считается меньший кубик',
   'Settings': 'Настройки',
+  'Make the panel narrow (see the map)': 'Сделать панель узкой (видно карту)',
+  'Make the panel wide': 'Сделать панель широкой',
+  'Owlbear: DM': 'Owlbear: мастер',
+  'Owlbear: player': 'Owlbear: игрок',
   'Sound': 'Звук',
   'All sound': 'Весь звук',
   'On': 'Вкл',
