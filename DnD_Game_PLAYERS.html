@@ -529,6 +529,15 @@ details.passive summary small { color: var(--dim); margin-left: 6px; }
 #side .from, .log .from { display: inline-block; font-size: 11px; color: var(--dim); margin-right: 6px; }
 nav button.live { border-color: #b44; }
 nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(--gold2); animation: dpop 1s ease-in-out infinite alternate; }
+.obrrow.pick { cursor: pointer; }
+.obrrow.pick:hover { border-color: #6b5530; }
+.obrrow.tgt { border-color: #c0392b; box-shadow: 0 0 0 1px #c0392b inset; }
+.tgtag { background: #5a1f1a; color: #ffd0c8; }
+.obract .actlist { display: flex; flex-wrap: wrap; gap: 6px; }
+.music .moodgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
+.music .moodgrid button.on { border-color: var(--gold); background: #3d3122; color: var(--gold2); }
+.music #tmYt { width: 100%; margin-bottom: 4px; }
+.music .ph { display: flex; justify-content: space-between; align-items: center; }
 
 </style>
 </head>
@@ -5590,11 +5599,35 @@ window.DND_RU.UI = {
   'Your turn!': 'Твой ход!',
   'Open your sheet to attack or cast.': 'Открой лист, чтобы атаковать или колдовать.',
   'The party': 'Отряд',
+  'Silence': 'Тишина',
+  'Table music': 'Музыка стола',
+  'Now playing:': 'Сейчас играет:',
+  'You choose — it plays for everyone in the room (even with the panel closed).': 'Ты выбираешь — играет у всех в комнате (даже с закрытой панелью).',
+  'YouTube link (music, ambience…)': 'Ссылка YouTube (музыка, атмосфера…)',
+  'Stop for everyone': 'Остановить у всех',
+  'My volume': 'Моя громкость',
+  'Mute the table music for me': 'Выключить музыку стола у меня',
+  'Your browser blocked the sound.': 'Браузер заблокировал звук.',
+  'Play it here': 'Играть здесь',
+  '🎵 in the top bar is your own quiet background music; the table music is separate.': '🎵 в шапке — твоя личная тихая музыка; музыка стола отдельно.',
+  'That is not a YouTube link.': 'Это не ссылка на YouTube.',
+  'Playing here while this panel is open.': 'Играет здесь, пока открыта панель.',
   'Sync is on (background page). Click to send everything again.': 'Синхронизация работает (фоновая страница). Нажми, чтобы отправить всё заново.',
   'Sync works only while this panel is open: reinstall the extension (manifest.json?v=…) to get the background page. Click to send everything again.': 'Синхронизация работает, только пока эта панель открыта: переустанови расширение (manifest.json?v=…), чтобы включилась фоновая страница. Нажми, чтобы отправить всё заново.',
   'Connecting…': 'Подключаюсь…',
   'Sync is off. Reload the page.': 'Синхронизация выключена. Обнови страницу.',
   'Sent everything again.': 'Всё отправлено заново.',
+  'No fight right now.': 'Сейчас боя нет.',
+  '{0} is not in the fight.': '{0} не участвует в бою.',
+  'This action did not work.': 'Это действие не сработало.',
+  'Sent to the DM — the result shows up in the roll log.': 'Отправлено мастеру — результат появится в журнале бросков.',
+  'Could not send: {0}': 'Не удалось отправить: {0}',
+  'Click a row to choose the target.': 'Нажми на строку, чтобы выбрать цель.',
+  'target': 'цель',
+  'Pick a target and an action below.': 'Выбери цель и действие ниже.',
+  'Not your turn: use this only for reactions (e.g. an opportunity attack) or when the DM says so.': 'Сейчас не твой ход: используй только для реакций (например, провоцированной атаки) или если мастер разрешил.',
+  'Advantage / Disadvantage: pick it in the dice panel first.': 'Преимущество / помеха: сначала выбери её в панели кубиков.',
+  'All enemies at once (area spells: Fireball, Thunderwave…)': 'Все враги сразу (заклинания по области: Огненный шар, Волна грома…)',
   'No connection to Owlbear: nothing syncs. Click to reconnect.': 'Нет связи с Owlbear: ничего не синхронизируется. Нажми ⚠️, чтобы переподключиться.',
   'Sound': 'Звук',
   'All sound': 'Весь звук',

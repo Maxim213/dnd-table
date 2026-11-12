@@ -46,7 +46,7 @@
     let OBR;
     try {
       say('<p>🦉 Owlbear…</p>');
-      OBR = fake ? (await import('./_dev/fakeobr.js')).default(fake, new URLSearchParams(location.search).get('name') || fake) : (await limit(import(SDK), 15000, 'Owlbear SDK download')).default;
+      OBR = fake ? (await import('./_dev/fakeobr.js')).default(fake, new URLSearchParams(location.search).get('name') || fake) : await limit(import(SDK), 15000, 'Owlbear SDK download').then(m => { window.OBR_SDK = m; return m.default; }); // the module: OBR + item builders
     } catch (e) { obrError = String(e.message || e); return null; }
     for (let i = 1; i <= 2; i++) {
       try {

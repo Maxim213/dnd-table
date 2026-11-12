@@ -81,3 +81,12 @@ No multiclassing and no live sync yet (files go through Discord). Levels 4–20:
 - **Heroes:** a player's heroes appear in the DM's open game automatically (tag `obr`). Whoever changes a hero last wins: damage from the DM reaches the player's sheet, the player's own changes reach the DM.
 - **Fight:** the DM's fight is summarised in the room (order, round, heroes' HP, monsters only as 🟢 Unhurt … 💀 Down). Players get **⚔️ Fight** in their menu, "⚔️ Your turn!" notifications and a "!" badge on the icon.
 - Local test without Owlbear: `_dev/sim.html` (DM + one player in one page, fake SDK in `_dev/fakeobr.js`; `_dev/` is not published).
+
+### Players act in the fight, token cards, table music (stage 4–5)
+- **Player acts:** in **⚔️ Fight** a player clicks a row to choose the target (🎯), then one of the hero's actions (attacks, spells, features). The request goes to the DM's app, which rolls, compares with AC, applies damage and spends slots — the result goes to everyone, even when the DM hides his own rolls. "All enemies at once" for area spells. Advantage / Disadvantage: pick it in the dice panel first.
+  Requests that arrive while the DM's panel is closed wait in a queue (`obrActQ`) and the DM gets a notification.
+- **Token cards** (`card.html`, `_engine/app/obr-card.js`): select one token in Owlbear → the D&D Table card shows in its menu.
+  DM: link the token to a hero or a monster in the fight, see real numbers, − Damage / + Heal for monsters, 🎯 make it the target of whoever acts now, ✂️ unlink.
+  Player: heroes (HP, AC), monsters only as Unhurt … Down, and **attack the monster right from its card** (with Advantage / Disadvantage).
+  Tokens named exactly like a hero or a fight monster link themselves. A **gold ring** follows whoever's turn it is.
+- **🎼 Table music** (`_engine/app/table-music.js`): the DM picks one of 8 moods (made in the browser, no files) or pastes a YouTube link; it plays for everyone (in the background page, so even with the panel closed) and everyone sets their own volume / mute. If a browser blocks the sound, 🎼 → "Play it here".

@@ -522,3 +522,12 @@ details.passive summary small { color: var(--dim); margin-left: 6px; }
 #side .from, .log .from { display: inline-block; font-size: 11px; color: var(--dim); margin-right: 6px; }
 nav button.live { border-color: #b44; }
 nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(--gold2); animation: dpop 1s ease-in-out infinite alternate; }
+.obrrow.pick { cursor: pointer; }
+.obrrow.pick:hover { border-color: #6b5530; }
+.obrrow.tgt { border-color: #c0392b; box-shadow: 0 0 0 1px #c0392b inset; }
+.tgtag { background: #5a1f1a; color: #ffd0c8; }
+.obract .actlist { display: flex; flex-wrap: wrap; gap: 6px; }
+.music .moodgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
+.music .moodgrid button.on { border-color: var(--gold); background: #3d3122; color: var(--gold2); }
+.music #tmYt { width: 100%; margin-bottom: 4px; }
+.music .ph { display: flex; justify-content: space-between; align-items: center; }

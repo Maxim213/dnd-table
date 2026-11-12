@@ -48,11 +48,12 @@ export function startBackground(OBR, by) {
       if (DM && !game()) return;
       const L = get(gk('log'), []); const fresh = L.filter(e => e && e.mine && e.id && !sent.has(e.id)).reverse();
       if (!fresh.length) return;
-      if (DM && localStorage.getItem('dnd.hideRolls') === '1') { // hidden rolls stay hidden for good
-        fresh.forEach(e => sent.add(e.id)); set('obrSent', [...sent].slice(-300)); return;
+      if (DM && localStorage.getItem('dnd.hideRolls') === '1') { // hidden rolls stay hidden for good (players' own actions are always shown)
+        fresh.filter(e => !e.share).forEach(e => sent.add(e.id)); set('obrSent', [...sent].slice(-300));
+        if (!fresh.some(e => e.share)) return;
       }
       const name = await myName();
-      for (const e of fresh) {
+      for (const e of fresh.filter(x => !sent.has(x.id))) {
         sent.add(e.id);
         try { await OBR.broadcast.sendMessage(CH, { type: 'log', id: e.id, t: e.t, html: e.html, from: name, dm: DM }); } catch (err) { console.warn(err); }
       }
@@ -142,21 +143,50 @@ export function startBackground(OBR, by) {
       } else if (!(a && a.cid && mine.has(a.cid))) { try { OBR.action.setBadgeText(undefined); } catch (e) {} }
     };
 
+    // ---------- table music: the DM picks (obrmusic) → room metadata → everybody's background page plays it ----------
+    const MUSIC = 'dndtable/music';
+    const musicLib = () => window.TableMusic ? Promise.resolve(window.TableMusic) : new Promise(ok => {
+      const s = document.createElement('script'); s.src = new URL('_engine/app/table-music.js', location.href).href; s.onload = () => ok(window.TableMusic); s.onerror = () => ok(null); document.head.appendChild(s);
+    });
+    let lastMusic = '';
+    const playMusic = async st => {
+      const k = JSON.stringify(st || null); if (k === lastMusic) return; lastMusic = k;
+      const TM = await musicLib(); if (!TM) return;
+      TM.apply(st); set('musicNow', st || null);
+      setTimeout(() => set('musicBlocked', !!(TM.blocked && TM.blocked())), 1500);
+    };
+    const publishMusic = async () => {
+      if (!DM) return; const st = get('obrmusic', null);
+      try { await OBR.room.setMetadata({ [MUSIC]: st }); } catch (e) { console.warn('music metadata', e); }
+      playMusic(st);
+    };
+
+    // ---------- a player acts in the fight (DM side): queue it for the DM's panel, which rolls and applies it ----------
+    const takeAct = async q => {
+      const Q = get('obrActQ', []); if (Q.some(x => x.id === q.id)) return;
+      Q.push(Object.assign({}, q, { t: q.t || Date.now() })); set('obrActQ', Q.slice(-20));
+      let open = false; try { open = await OBR.action.isOpen(); } catch (e) {}
+      if (!open) try { OBR.notification.show('🎯 ' + (q.from || tr('A player', 'Игрок')) + ': ' + tr('acts in the fight — open D&D Table to resolve it', 'действует в бою — открой D&D Table, чтобы бросок прошёл'), 'WARNING'); } catch (e) {}
+    };
+
     // ---------- wire it up ----------
     OBR.broadcast.onMessage(CH, ev => {
       const m = (ev && ev.data) || {};
       if (m.type === 'log') takeLog(m);
       else if (m.type === 'heroSet') takeHero(m);
+      else if (m.type === 'act' && DM && m.req) takeAct(m.req);
     });
     if (DM) {
       OBR.party.onChange(players => mergeHeroes(players));
       OBR.party.getPlayers().then(mergeHeroes).catch(() => {});
       publishState();
+      playMusic(get('obrmusic', null));
     } else {
-      OBR.room.onMetadataChange(md => takeState((md || {})[ROOM]));
-      OBR.room.getMetadata().then(md => takeState((md || {})[ROOM])).catch(() => {});
+      OBR.room.onMetadataChange(md => { takeState((md || {})[ROOM]); playMusic((md || {})[MUSIC]); });
+      OBR.room.getMetadata().then(md => { takeState((md || {})[ROOM]); playMusic((md || {})[MUSIC]); }).catch(() => {});
       publishHeroes();
     }
+    window.addEventListener('storage', e => { if (e.key === 'dnd.tableVol' || e.key === 'dnd.tableMute') musicLib().then(TM => TM && TM.setVolume()); });
     const onKey = k => {
       k = k || '';
       if (!k.startsWith(P)) return;
@@ -165,6 +195,7 @@ export function startBackground(OBR, by) {
       if (rest === gk('log')) sendNewLog();
       if (rest === gk('chars')) { if (DM) sendHeroChanges(); else publishHeroes(); }
       if (DM && rest === 'obrstate') publishState();
+      if (DM && rest === 'obrmusic') publishMusic();
       if (rest === 'resyncReq' && by === 'bg') resync(); // the 🟢 button in the panel
     };
     window.addEventListener('storage', e => onKey(e.key));
@@ -179,6 +210,15 @@ export function startBackground(OBR, by) {
       return true;
     };
     window.__obrSync = { by, role, key: onKey, resync };
+    // token card in Owlbear's context menu (one selected item): card.html
+    try {
+      OBR.contextMenu.create({
+        id: 'dndtable/card',
+        icons: [{ icon: new URL('icon.svg', location.href).href, label: 'D&D Table', filter: { max: 1 } }],
+        embed: { url: new URL('card.html', location.href).href, height: 300 },
+        onClick() {}
+      });
+    } catch (e) { console.warn('context menu', e); }
     sendNewLog();
     console.log('D&D Table sync ready:', role, by);
   });
