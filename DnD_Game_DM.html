@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D&amp;D Game</title>
+<link rel="stylesheet" href="_engine/app/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">🐉 <b>D&amp;D Game</b> <span class="modetag" id="modeTag"></span> <span class="langsw" id="langSw"></span> <span class="topctl" id="topCtl"></span></div>
+  <nav>
+    <button class="dm-only gamebtn" id="gameTag" data-act="nav" data-v="games" data-t-title="Your games (save slots)">🎲</button>
+    <button class="need-game" data-act="nav" data-v="home" data-t="🧙 Characters">🧙 Characters</button>
+    <button class="need-game" data-act="nav" data-v="items" data-t="🎒 Equipment">🎒 Equipment</button>
+    <button class="dm-only need-game" data-act="nav" data-v="combat" data-t="⚔️ Combat">⚔️ Combat</button>
+    <button data-act="nav" data-v="help" data-t="❓ How to use">❓ How to use</button>
+  </nav>
+</header>
+<div class="wrap">
+  <main id="main"></main>
+  <aside id="side"></aside>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="pop"></div>
+<input type="file" id="importFile" accept=".json,application/json" multiple hidden>
+<input type="file" id="gameFile" accept=".json,application/json" hidden>
+<input type="file" id="portraitFile" accept="image/*" hidden>
+
+<!-- Rules data (edit these to add your own content) -->
+<script src="_engine/data/rules.js"></script>
+<script src="_engine/data/classes.js"></script>
+<script src="_engine/data/species.js"></script>
+<script src="_engine/data/spells.js"></script>
+<script src="_engine/data/monsters.js"></script>
+<script src="_engine/data/homebrew.js"></script>
+<script src="_engine/data/help.js"></script>
+<script src="_engine/data/levels.js"></script>
+<script src="_engine/data/spells2.js"></script>
+<script src="_engine/data/spells3.js"></script>
+<script src="_engine/data/spells4.js"></script>
+<script src="_engine/data/subclasses.js"></script>
+<script src="_engine/data/options.js"></script>
+<script src="_engine/data/items.js"></script>
+<script src="_engine/data/items2.js"></script>
+<script src="_engine/data/items3.js"></script>
+<script src="_engine/data/monsters2.js"></script>
+<script src="_engine/data/monsters3.js"></script>
+<script src="_engine/data/monsters4.js"></script>
+<script src="_engine/data/montypes.js"></script>
+<!-- Russian layer (text only) -->
+<script src="_engine/data/ru/rules.js"></script>
+<script src="_engine/data/ru/classes.js"></script>
+<script src="_engine/data/ru/species.js"></script>
+<script src="_engine/data/ru/spells.js"></script>
+<script src="_engine/data/ru/monsters.js"></script>
+<script src="_engine/data/ru/help.js"></script>
+<script src="_engine/data/ru/ui.js"></script>
+<!-- App -->
+<script src="_engine/app/sound.js"></script>
+<script src="_engine/app/scenario.js"></script>
+<script src="_engine/app/engine.js"></script>
+<script src="_engine/app/ui-core.js"></script>
+<script src="_engine/app/ui-chars.js"></script>
+<script src="_engine/app/ui-sheet.js"></script>
+<script src="_engine/app/ui-combat.js"></script>
+<script src="_engine/app/ui-games.js"></script>
+<script src="_engine/app/ui-levels.js"></script>
+<script src="_engine/app/ui-items.js"></script>
+<script>UI.start();</script>
+</body>
+</html>

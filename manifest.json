@@ -1,0 +1,19 @@
+{
+  "name": "D&D Table",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "description": "Our D&D 5e (2024) table: character sheets, dice, combat, monsters, items and scenarios. DM and player versions.",
+  "author": "Our table",
+  "icon": "icon.svg",
+  "action": {
+    "title": "D&D Table",
+    "icon": "icon.svg",
+    "popover": "index.html",
+    "width": 440,
+    "height": 760
+  },
+  "permissions": [
+    { "name": "autoplay", "reason": "To play the table music the DM chooses." },
+    { "name": "clipboard-write", "reason": "To copy roll results." }
+  ]
+}

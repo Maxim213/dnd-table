@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D&amp;D Table</title>
+<link rel="stylesheet" href="_engine/app/style.css">
+</head>
+<body class="online">
+<!-- ONLINE version (GitHub Pages + Owlbear Rodeo extension). The offline files are DnD_Game_DM.html / DnD_Game_PLAYERS.html.
+     Inside Owlbear the player's role decides the version: GM = DM version, PLAYER = player version.
+     The app scripts are the SAME as in DnD_Game_DM.html: this page reads that file's script list, so there is one list to keep. -->
+<header class="top">
+  <div class="brand">🐉 <b>D&amp;D Game</b> <span class="modetag" id="modeTag"></span> <span class="langsw" id="langSw"></span> <span class="topctl" id="topCtl"></span></div>
+  <nav>
+    <button class="dm-only gamebtn" id="gameTag" data-act="nav" data-v="games" data-t-title="Your games (save slots)">🎲</button>
+    <button class="need-game" data-act="nav" data-v="home" data-t="🧙 Characters">🧙 Characters</button>
+    <button class="need-game" data-act="nav" data-v="items" data-t="🎒 Equipment">🎒 Equipment</button>
+    <button class="dm-only need-game" data-act="nav" data-v="combat" data-t="⚔️ Combat">⚔️ Combat</button>
+    <button data-act="nav" data-v="help" data-t="❓ How to use">❓ How to use</button>
+  </nav>
+</header>
+<div class="wrap">
+  <main id="main"><div class="emptybig"><p>⏳ Loading… / Загрузка…</p></div></main>
+  <aside id="side"></aside>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="pop"></div>
+<input type="file" id="importFile" accept=".json,application/json" multiple hidden>
+<input type="file" id="gameFile" accept=".json,application/json" hidden>
+<input type="file" id="portraitFile" accept="image/*" hidden>
+
+<script type="module">
+  const SDK = 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm'; // exact version, MIT license
+  const say = html => { document.getElementById('main').innerHTML = '<div class="emptybig">' + html + '</div>'; };
+  const load = src => new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('Cannot load ' + src)); document.body.appendChild(s); });
+
+  // 1. Are we inside Owlbear Rodeo? Then ask it who we are.
+  async function owlbear() {
+    if (window.parent === window) return null; // opened directly, not inside Owlbear
+    try {
+      const OBR = (await import(SDK)).default;
+      await new Promise((ok, bad) => { if (OBR.isReady) ok(); else OBR.onReady(ok); setTimeout(() => bad(new Error('Owlbear did not answer')), 10000); });
+      window.OBR = OBR;
+      return await OBR.player.getRole(); // 'GM' | 'PLAYER'
+    } catch (e) { console.warn('Owlbear SDK:', e); return null; }
+  }
+  // 2. Outside Owlbear: ask once (DM or player), remember the answer
+  function pickRole() {
+    const q = new URLSearchParams(location.search).get('mode');
+    if (q === 'player' || q === 'dm') return Promise.resolve(q);
+    let saved = ''; try { saved = localStorage.getItem('dnd.onlineRole') || ''; } catch (e) {}
+    if (saved) return Promise.resolve(saved);
+    return new Promise(ok => {
+      say('<h2>🐉 D&amp;D Table</h2><p>Кто ты? / Who are you?</p><p class="btnrow" style="justify-content:center">' +
+        '<button class="primary" id="roleDm">🎲 Мастер / DM</button><button class="primary" id="rolePl">🧙 Игрок / Player</button></p>' +
+        '<p class="hint">Внутри Owlbear Rodeo это определяется само. / Inside Owlbear Rodeo this is automatic.</p>');
+      const set = r => () => { try { localStorage.setItem('dnd.onlineRole', r); } catch (e) {} ok(r); };
+      document.getElementById('roleDm').onclick = set('dm'); document.getElementById('rolePl').onclick = set('player');
+    });
+  }
+  (async () => {
+    const role = await owlbear();
+    const mode = role ? (role === 'GM' ? 'dm' : 'player') : await pickRole();
+    window.ONLINE = { owlbear: !!role, role: role || '', mode };
+    if (mode === 'player') window.APP_MODE = 'player';
+    // 3. the app scripts, in the same order as DnD_Game_DM.html
+    try {
+      const html = await (await fetch('DnD_Game_DM.html', { cache: 'no-cache' })).text();
+      const list = [...html.matchAll(/<script src="(_engine\/[^"]+)"><\/script>/g)].map(m => m[1]);
+      if (!list.length) throw new Error('No scripts found in DnD_Game_DM.html');
+      for (const src of list) await load(src);
+      await load('_engine/app/online.js');
+      UI.start();
+      if (window.ONLINE_START) window.ONLINE_START();
+    } catch (e) { console.error(e); say('<p>⚠️ ' + String(e.message || e) + '</p>'); }
+  })();
+</script>
+</body>
+</html>

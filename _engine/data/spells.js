@@ -1,0 +1,90 @@
+// Spells (cantrips, level 1, common level 2). Short summaries in our own words. Safe to edit.
+// Fields: n name, l level, c classes, t casting time, r range, conc concentration,
+// a: 'atk' (spell attack) | 'save' (with s: ability) | 'auto' (always hits) | 'heal' | 'temp' (temp HP) | 'dmg' (extra damage) | null
+// d damage/heal dice, dt damage type, half (half damage on successful save), count (number of rays/darts),
+// addMod (add spellcasting modifier to the roll), fx (effects when toggled on, e.g. AC), desc.
+window.DND = window.DND || {};
+(function (D) {
+  const B = 'bard', C = 'cleric', DR = 'druid', P = 'paladin', R = 'ranger', S = 'sorcerer', WL = 'warlock', W = 'wizard';
+  D.SPELLS = [
+    // ---------- Cantrips ----------
+    { n: 'Acid Splash', l: 0, c: [S, W], t: 'Action', r: '60 ft', a: 'save', s: 'DEX', d: '1d6', dt: 'acid', desc: 'Bubble of acid bursts in a 5-ft sphere. Each creature in it: DEX save or take acid damage.' },
+    { n: 'Chill Touch', l: 0, c: [S, WL, W], t: 'Action', r: 'Touch', a: 'atk', d: '1d10', dt: 'necrotic', desc: 'Melee spell attack. On hit the target can\'t regain HP until your next turn.' },
+    { n: 'Dancing Lights', l: 0, c: [B, S, W], t: 'Action', r: '120 ft', conc: true, desc: 'Up to four floating lights you can move.' },
+    { n: 'Druidcraft', l: 0, c: [DR], t: 'Action', r: '30 ft', desc: 'Small nature tricks: predict weather, bloom a flower, light/snuff a candle.' },
+    { n: 'Eldritch Blast', l: 0, c: [WL], t: 'Action', r: '120 ft', a: 'atk', d: '1d10', dt: 'force', desc: 'A beam of crackling energy. (More beams at level 5.)' },
+    { n: 'Fire Bolt', l: 0, c: [S, W], t: 'Action', r: '120 ft', a: 'atk', d: '1d10', dt: 'fire', desc: 'Hurl a mote of fire. Ignites flammable objects.' },
+    { n: 'Guidance', l: 0, c: [C, DR], t: 'Action', r: 'Touch', conc: true, desc: 'Ally adds 1d4 to ability checks with a chosen skill for 1 minute.' },
+    { n: 'Light', l: 0, c: [B, C, S, W], t: 'Action', r: 'Touch', desc: 'An object sheds bright light 20 ft for 1 hour.' },
+    { n: 'Mage Hand', l: 0, c: [B, S, WL, W], t: 'Action', r: '30 ft', desc: 'A ghostly hand that can manipulate objects up to 10 lb.' },
+    { n: 'Mending', l: 0, c: [B, C, DR, S, W], t: '1 minute', r: 'Touch', desc: 'Repair a single break or tear.' },
+    { n: 'Message', l: 0, c: [B, DR, S, W], t: 'Action', r: '120 ft', desc: 'Whisper a message to a creature; it can whisper back.' },
+    { n: 'Minor Illusion', l: 0, c: [B, S, WL, W], t: 'Action', r: '30 ft', desc: 'Create a sound or an image of an object (5-ft cube) for 1 minute.' },
+    { n: 'Poison Spray', l: 0, c: [DR, S, WL, W], t: 'Action', r: '30 ft', a: 'atk', d: '1d12', dt: 'poison', desc: 'Spray toxic mist at a creature.' },
+    { n: 'Prestidigitation', l: 0, c: [B, S, WL, W], t: 'Action', r: '10 ft', desc: 'Minor magic tricks: clean, warm, flavor, spark, small illusions.' },
+    { n: 'Produce Flame', l: 0, c: [DR], t: 'Bonus Action', r: 'Self / 60 ft', a: 'atk', d: '1d8', dt: 'fire', desc: 'A flame in your hand gives light; throw it (Magic action) as a ranged spell attack.' },
+    { n: 'Ray of Frost', l: 0, c: [S, W], t: 'Action', r: '60 ft', a: 'atk', d: '1d8', dt: 'cold', desc: 'Frigid beam. On hit, target\'s Speed −10 ft until your next turn.' },
+    { n: 'Resistance', l: 0, c: [C, DR], t: 'Action', r: 'Touch', conc: true, desc: 'Choose a damage type: when the ally takes that damage, reduce it by 1d4.' },
+    { n: 'Sacred Flame', l: 0, c: [C], t: 'Action', r: '60 ft', a: 'save', s: 'DEX', d: '1d8', dt: 'radiant', desc: 'Radiant flame falls on a creature. Cover doesn\'t help.' },
+    { n: 'Shillelagh', l: 0, c: [DR], t: 'Bonus Action', r: 'Self', desc: 'Your club or quarterstaff uses your spellcasting ability, damage die becomes d8, can deal force damage. 1 minute.' },
+    { n: 'Shocking Grasp', l: 0, c: [S, W], t: 'Action', r: 'Touch', a: 'atk', d: '1d8', dt: 'lightning', desc: 'Melee spell attack. On hit, the target can\'t make Opportunity Attacks until its next turn.' },
+    { n: 'Spare the Dying', l: 0, c: [C, DR], t: 'Action', r: '15 ft', desc: 'A creature at 0 HP becomes Stable.' },
+    { n: 'Thaumaturgy', l: 0, c: [C], t: 'Action', r: '30 ft', desc: 'Minor wonders: booming voice, flickering flames, tremors, glowing eyes.' },
+    { n: 'Thorn Whip', l: 0, c: [DR], t: 'Action', r: '30 ft', a: 'atk', d: '1d6', dt: 'piercing', desc: 'Melee spell attack with a vine. On hit, pull the target up to 10 ft toward you.' },
+    { n: 'True Strike', l: 0, c: [B, S, WL, W], t: 'Action', r: 'Self', desc: 'Attack with a weapon using your spellcasting ability for attack and damage; damage can be radiant.' },
+    { n: 'Vicious Mockery', l: 0, c: [B], t: 'Action', r: '60 ft', a: 'save', s: 'WIS', d: '1d6', dt: 'psychic', desc: 'Magical insult. On a failed save, the target also has Disadvantage on its next attack.' },
+
+    // ---------- Level 1 ----------
+    { n: 'Animal Friendship', l: 1, c: [B, DR, R], t: 'Action', r: '30 ft', a: 'save', s: 'WIS', desc: 'A Beast is Charmed by you for 24 hours.' },
+    { n: 'Bless', l: 1, c: [C, P], t: 'Action', r: '30 ft', conc: true, desc: 'Up to 3 creatures add 1d4 to attack rolls and saving throws for 1 minute.' },
+    { n: 'Burning Hands', l: 1, c: [S, W], t: 'Action', r: '15-ft cone', a: 'save', s: 'DEX', d: '3d6', dt: 'fire', half: true, desc: 'Sheet of flame from your fingertips.' },
+    { n: 'Charm Person', l: 1, c: [B, DR, S, WL, W], t: 'Action', r: '30 ft', a: 'save', s: 'WIS', desc: 'A humanoid is Charmed for 1 hour (Advantage on the save if you\'re fighting it).' },
+    { n: 'Chromatic Orb', l: 1, c: [S, W], t: 'Action', r: '90 ft', a: 'atk', d: '3d8', dt: 'acid/cold/fire/lightning/poison/thunder', desc: 'Sphere of energy of a type you choose.' },
+    { n: 'Command', l: 1, c: [B, C, P], t: 'Action', r: '60 ft', a: 'save', s: 'WIS', desc: 'One-word command: Approach, Drop, Flee, Grovel or Halt.' },
+    { n: 'Comprehend Languages', l: 1, c: [B, S, WL, W], t: 'Action (ritual)', r: 'Self', desc: 'Understand any spoken or written language for 1 hour.' },
+    { n: 'Cure Wounds', l: 1, c: [B, C, DR, P, R], t: 'Action', r: 'Touch', a: 'heal', d: '2d8', addMod: true, desc: 'Heal a creature.' },
+    { n: 'Detect Magic', l: 1, c: [B, C, DR, P, R, S, W], t: 'Action (ritual)', r: 'Self', conc: true, desc: 'Sense magic within 30 ft for 10 minutes.' },
+    { n: 'Disguise Self', l: 1, c: [B, S, W], t: 'Action', r: 'Self', desc: 'Change your appearance for 1 hour.' },
+    { n: 'Divine Smite', l: 1, c: [P], t: 'Bonus Action (after a hit)', r: 'Self', a: 'dmg', d: '2d8', dt: 'radiant', desc: 'After hitting with a melee weapon or unarmed strike: +2d8 radiant (+1d8 more vs Fiends and Undead).' },
+    { n: 'Entangle', l: 1, c: [DR, R], t: 'Action', r: '90 ft', a: 'save', s: 'STR', conc: true, desc: 'Grasping plants in a 20-ft square: STR save or Restrained.' },
+    { n: 'Expeditious Retreat', l: 1, c: [S, WL, W], t: 'Bonus Action', r: 'Self', conc: true, desc: 'Dash now and as a Bonus Action each turn for 10 minutes.' },
+    { n: 'Faerie Fire', l: 1, c: [B, DR], t: 'Action', r: '60 ft', a: 'save', s: 'DEX', conc: true, desc: '20-ft cube: failing creatures glow; attacks against them have Advantage, they can\'t be Invisible.' },
+    { n: 'False Life', l: 1, c: [S, W], t: 'Action', r: 'Self', a: 'temp', d: '2d4+4', desc: 'Gain Temporary HP.' },
+    { n: 'Feather Fall', l: 1, c: [B, S, W], t: 'Reaction', r: '60 ft', desc: 'Up to 5 falling creatures descend slowly and take no fall damage.' },
+    { n: 'Find Familiar', l: 1, c: [W], t: '1 hour (ritual)', r: '10 ft', desc: 'Summon a spirit animal companion (owl, cat, rat, etc.).' },
+    { n: 'Fog Cloud', l: 1, c: [DR, R, S, W], t: 'Action', r: '120 ft', conc: true, desc: '20-ft-radius sphere of fog: Heavily Obscured.' },
+    { n: 'Goodberry', l: 1, c: [DR, R], t: 'Action', r: 'Self', desc: 'Create 10 berries; each heals 1 HP and feeds a creature for a day.' },
+    { n: 'Guiding Bolt', l: 1, c: [C], t: 'Action', r: '120 ft', a: 'atk', d: '4d6', dt: 'radiant', desc: 'Flash of light. On hit, the next attack against the target has Advantage.' },
+    { n: 'Healing Word', l: 1, c: [B, C, DR], t: 'Bonus Action', r: '60 ft', a: 'heal', d: '2d4', addMod: true, desc: 'Heal a creature you can see. Great for picking up downed allies.' },
+    { n: 'Hellish Rebuke', l: 1, c: [WL], t: 'Reaction', r: '60 ft', a: 'save', s: 'DEX', d: '2d10', dt: 'fire', half: true, desc: 'When a creature damages you, it\'s engulfed in flames.' },
+    { n: 'Heroism', l: 1, c: [B, P], t: 'Action', r: 'Touch', conc: true, desc: 'Immune to Frightened; gain Temp HP = your spell mod each turn.' },
+    { n: 'Hex', l: 1, c: [WL], t: 'Bonus Action', r: '90 ft', a: 'dmg', d: '1d6', dt: 'necrotic', conc: true, desc: 'Curse a creature: +1d6 necrotic when you hit it; Disadvantage on checks with one ability.' },
+    { n: 'Hunter\'s Mark', l: 1, c: [R], t: 'Bonus Action', r: '90 ft', a: 'dmg', d: '1d6', dt: 'force', conc: true, desc: 'Mark a creature: +1d6 force when you hit it; Advantage on checks to find it.' },
+    { n: 'Identify', l: 1, c: [B, W], t: '1 minute (ritual)', r: 'Touch', desc: 'Learn a magic item\'s properties.' },
+    { n: 'Inflict Wounds', l: 1, c: [C], t: 'Action', r: 'Touch', a: 'save', s: 'CON', d: '2d10', dt: 'necrotic', half: true, desc: 'Necrotic energy floods a creature.' },
+    { n: 'Longstrider', l: 1, c: [B, DR, R, W], t: 'Action', r: 'Touch', desc: '+10 ft Speed for 1 hour.', fx: [{ type: 'speed', value: 10 }] },
+    { n: 'Mage Armor', l: 1, c: [S, W], t: 'Action', r: 'Touch', desc: 'Without armor, AC = 13 + DEX for 8 hours.', mageArmor: true },
+    { n: 'Magic Missile', l: 1, c: [S, W], t: 'Action', r: '120 ft', a: 'auto', d: '1d4+1', dt: 'force', count: 3, desc: 'Three darts that always hit.' },
+    { n: 'Protection from Evil and Good', l: 1, c: [C, P, WL, W], t: 'Action', r: 'Touch', conc: true, desc: 'Aberrations, celestials, elementals, fey, fiends and undead have Disadvantage to attack the target.' },
+    { n: 'Ray of Sickness', l: 1, c: [S, W], t: 'Action', r: '60 ft', a: 'atk', d: '2d8', dt: 'poison', desc: 'On hit, target is also Poisoned until end of your next turn.' },
+    { n: 'Shield', l: 1, c: [S, W], t: 'Reaction', r: 'Self', desc: '+5 AC until the start of your next turn (including vs the triggering attack).', fx: [{ type: 'ac', value: 5 }] },
+    { n: 'Shield of Faith', l: 1, c: [C, P], t: 'Bonus Action', r: '60 ft', conc: true, desc: '+2 AC for 10 minutes.', fx: [{ type: 'ac', value: 2 }] },
+    { n: 'Sleep', l: 1, c: [B, S, W], t: 'Action', r: '60 ft', a: 'save', s: 'WIS', conc: true, desc: '5-ft sphere: WIS save or Incapacitated; fail again next turn → Unconscious.' },
+    { n: 'Speak with Animals', l: 1, c: [B, DR, R], t: 'Action (ritual)', r: 'Self', desc: 'Talk with beasts for 10 minutes.' },
+    { n: 'Thunderwave', l: 1, c: [B, DR, S, W], t: 'Action', r: '15-ft cube', a: 'save', s: 'CON', d: '2d8', dt: 'thunder', half: true, desc: 'Wave of force. Failed save also pushes 10 ft. Audible 300 ft away.' },
+
+    // ---------- Level 2 (for level 3 characters) ----------
+    { n: 'Aid', l: 2, c: [B, C, DR, P, R], t: 'Action', r: '30 ft', desc: 'Up to 3 creatures: max HP and current HP +5 for 8 hours.' },
+    { n: 'Hold Person', l: 2, c: [B, C, DR, S, WL, W], t: 'Action', r: '60 ft', a: 'save', s: 'WIS', conc: true, desc: 'A humanoid is Paralyzed (repeats save each turn).' },
+    { n: 'Invisibility', l: 2, c: [B, S, WL, W], t: 'Action', r: 'Touch', conc: true, desc: 'Target is Invisible until it attacks, deals damage or casts a spell.' },
+    { n: 'Lesser Restoration', l: 2, c: [B, C, DR, P, R], t: 'Bonus Action', r: 'Touch', desc: 'End Blinded, Deafened, Paralyzed or Poisoned.' },
+    { n: 'Misty Step', l: 2, c: [S, WL, W], t: 'Bonus Action', r: 'Self', desc: 'Teleport 30 ft to a space you can see.' },
+    { n: 'Moonbeam', l: 2, c: [DR], t: 'Action', r: '120 ft', a: 'save', s: 'CON', d: '2d10', dt: 'radiant', half: true, conc: true, desc: 'Pillar of moonlight; damages creatures entering or starting in it.' },
+    { n: 'Scorching Ray', l: 2, c: [S, W], t: 'Action', r: '120 ft', a: 'atk', d: '2d6', dt: 'fire', count: 3, desc: 'Three rays, each a separate spell attack.' },
+    { n: 'Shatter', l: 2, c: [B, S, WL, W], t: 'Action', r: '60 ft', a: 'save', s: 'CON', d: '3d8', dt: 'thunder', half: true, desc: 'Loud ringing noise in a 10-ft sphere.' },
+    { n: 'Spiritual Weapon', l: 2, c: [C], t: 'Bonus Action', r: '60 ft', a: 'atk', d: '1d8', dt: 'force', addMod: true, conc: true, desc: 'Floating spectral weapon; attack with it as a Bonus Action each turn.' },
+    { n: 'Suggestion', l: 2, c: [B, S, WL, W], t: 'Action', r: '30 ft', a: 'save', s: 'WIS', conc: true, desc: 'Suggest a reasonable course of action; the target follows it.' }
+  ];
+
+  D.MI_LISTS = { cleric: { name: 'Cleric', ability: 'WIS' }, druid: { name: 'Druid', ability: 'WIS' }, wizard: { name: 'Wizard', ability: 'INT' } };
+})(window.DND);
