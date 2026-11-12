@@ -69,8 +69,9 @@
       const html = await (await fetch('DnD_Game_DM.html', { cache: 'no-cache' })).text();
       const list = [...html.matchAll(/<script src="(_engine\/[^"]+)"><\/script>/g)].map(m => m[1]);
       if (!list.length) throw new Error('No scripts found in DnD_Game_DM.html');
-      for (const src of list) await load(src);
-      await load('_engine/app/online.js');
+      // download all at once, run in order (async = false keeps the order of dynamically added scripts)
+      const all = list.concat('_engine/app/online.js').map(src => { const s = document.createElement('script'); s.src = src; s.async = false; return new Promise((ok, bad) => { s.onload = ok; s.onerror = () => bad(new Error('Cannot load ' + src)); document.body.appendChild(s); }); });
+      await Promise.all(all);
       UI.start();
       if (window.ONLINE_START) window.ONLINE_START();
     } catch (e) { console.error(e); say('<p>⚠️ ' + String(e.message || e) + '</p>'); }
