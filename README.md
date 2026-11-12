@@ -66,3 +66,11 @@ After you export a hero, the player's copy is **🔒 managed by DM**. They can s
 
 ## Limits
 No multiclassing and no live sync yet (files go through Discord). Levels 4–20: the most important numbers are automatic (HP, slots, extra attacks, cantrip damage, feature uses). Rarer high-level powers are written out, and you apply them yourself. Spells of levels 3–9 are a selection (about 60), not every spell.
+
+## Online: Owlbear Rodeo extension (GitHub Pages)
+- `index.html` = the online version. Inside an Owlbear Rodeo room it opens as the **D&D Table** extension panel; the Owlbear role decides the version (GM → DM version, player → player version). Opened directly in a browser it asks "DM or player" once.
+- It loads the same app scripts as `DnD_Game_DM.html` (it reads that file's script list), plus `_engine/app/online.js` (Owlbear bridge: role tag, ⇤/⇥ narrow / wide panel). The Owlbear SDK comes from jsdelivr, pinned to `@owlbear-rodeo/sdk@3.1.0`.
+- `manifest.json` + `icon.svg` describe the extension. `.nojekyll` makes GitHub Pages serve the `_engine` folder.
+- Data inside Owlbear is saved in the browser separately from the offline files: move a game once with 💾 Save file → 🎲 Load game from file.
+- This folder is a git repository. Publish it with GitHub Desktop (public repo) and turn on Settings → Pages → branch `main`, folder `/ (root)`. Extension link: `https://<user>.github.io/<repo>/manifest.json`.
+- Coming next: sync between players, token cards (click a token → card), music for everyone.
