@@ -92,7 +92,8 @@ export function startBackground(OBR, by) {
           const i = chars.findIndex(c => c.id === h.id); const old = i >= 0 ? chars[i] : null;
           if (old && old.obr && (h.upd || 0) <= (old.upd || 0)) return; // ours is newer or the same
           const merged = Object.assign({}, h, { obr: { pid: p.id, name: p.name }, party: old ? old.party !== false : true });
-          if (old && old.portrait && !h.portrait) merged.portrait = old.portrait;
+          if (h.portraitThumb) merged.portrait = h.portraitThumb; // the player's picture (small copy)
+          else if (old && old.portrait) merged.portrait = old.portrait;
           if (i >= 0) chars[i] = merged; else chars.push(merged);
           changed = true;
         });
@@ -115,7 +116,7 @@ export function startBackground(OBR, by) {
       if (DM || !m.hero || m.to !== OBR.player.id) return;
       const chars = get('chars', []); const i = chars.findIndex(c => c.id === m.hero.id);
       if (i < 0 || (m.hero.upd || 0) <= (chars[i].upd || 0)) return;
-      const h = Object.assign({}, m.hero); delete h.obr; if (chars[i].portrait) h.portrait = chars[i].portrait;
+      const h = Object.assign({}, m.hero); delete h.obr; ['portrait', 'portraitThumb', 'portraitThumbKey'].forEach(k => { if (chars[i][k]) h[k] = chars[i][k]; else delete h[k]; }); // my own picture stays
       chars[i] = h; set('chars', chars); publishHeroes();
     };
 

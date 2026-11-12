@@ -55,8 +55,29 @@
   U.saveChars = function () {
     const now = Date.now();
     (S.chars || []).forEach(c => { const s = sig(c); if (sigs[c.id] !== s) { c.upd = now; sigs[c.id] = s; } });
-    const r = baseSaveChars(); local('chars'); queueState(); return r;
+    const r = baseSaveChars(); local('chars'); queueState(); thumbs(); return r;
   };
+  // portraits are too big for Owlbear (16 KB per message): my heroes carry a small 96×96 copy (portraitThumb, ~4 KB)
+  const pKey = src => src ? src.length + ':' + src.slice(-32) : '';
+  const makeThumb = src => new Promise(ok => {
+    const img = new Image();
+    img.onload = () => { try { const s = 96, cv = document.createElement('canvas'); cv.width = cv.height = s; const r = Math.min(img.width, img.height); cv.getContext('2d').drawImage(img, (img.width - r) / 2, (img.height - r) / 2, r, r, 0, 0, s, s); ok(cv.toDataURL('image/jpeg', 0.72)); } catch (e) { ok(''); } };
+    img.onerror = () => ok(''); img.src = src;
+  });
+  let thumbBusy = false;
+  async function thumbs() {
+    if (thumbBusy) return; thumbBusy = true;
+    try {
+      let changed = false;
+      for (const c of (S.chars || [])) {
+        if (U.DM && c.obr) continue; // a player's hero: its picture comes from the player
+        const k = pKey(c.portrait);
+        if (!k && c.portraitThumb) { delete c.portraitThumb; delete c.portraitThumbKey; changed = true; continue; }
+        if (k && c.portraitThumbKey !== k) { const t = await makeThumb(c.portrait); if (t) { c.portraitThumb = t; c.portraitThumbKey = k; changed = true; } }
+      }
+      if (changed) U.saveChars();
+    } finally { thumbBusy = false; }
+  }
 
   // ---------- 3. DM: a short fight summary for the players (room metadata, through the background page) ----------
   const health = (hp, mx) => (hp <= 0 ? 'down' : !mx || hp >= mx ? 'ok' : hp / mx > 0.5 ? 'hurt' : hp / mx > 0.25 ? 'bloodied' : 'dying');
@@ -157,7 +178,7 @@
     document.body.classList.add('in-obr');
     applySize(getSize());
     remember();
-    checkSync();
+    checkSync(); setTimeout(thumbs, 500); // heroes that already have a picture
     if (U.PLAYER) {
       const nav = document.querySelector('header.top nav');
       if (nav && !nav.querySelector('[data-v="obrfight"]')) nav.insertAdjacentHTML('afterbegin', '<button data-act="nav" data-v="obrfight">⚔️ ' + esc(T('Fight')) + '</button>');
