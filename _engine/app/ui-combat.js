@@ -17,6 +17,7 @@
     return S.monsters.map(normMon).concat(built);
   }
   const monById = id => allMonsters().find(m => m.id === id);
+  U.allMonsters = allMonsters; U.monById = monById; // the scene maker (obr-scenes.js) needs them
   const crInfo = cr => D.CR_TABLE[String(cr)] || null;
   // "CR 1/2 (0.5)" + what it means for the heroes
   const crDec = cr => (String(cr).indexOf('/') > 0 ? ' (' + D.crNum(cr) + ')' : '');
@@ -148,12 +149,14 @@
     });
     return acts;
   }
+  U.monActions = monActions; // the DM's token window (online.js) lists them
 const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (players need them too)
 
   function startTurn(cb) {
     cb.econ = U.econNew(); cb.move = { ft: 0 }; // a new turn: action, bonus action, reaction and movement are back
     const v = cbView(cb); if (!v) return;
     const ended = U.tickConds(v.holder); const lines = [];
+    if (cb.type === 'pc') { const c0 = U.byId(cb.charId); if (c0 && c0.toggles && c0.toggles['spell:Shield']) { delete c0.toggles['spell:Shield']; lines.push(T('Shield ends (+5 AC is gone).')); U.saveChars(); } }
     if (ended.length) lines.push(T('no longer {0}', ended.map(x => esc(t(x))).join(', ')));
     if (cb.type === 'mon') (cb.abilities || []).forEach(ab => {
       if (cb.spent && cb.spent[ab.id] && Number(ab.recharge) > 0) {
@@ -476,7 +479,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
           active.used = active.used || {}; active.used[ab.id] = (active.used[ab.id] || 0) + 1;
           if (Number(ab.recharge) > 0) { active.spent = active.spent || {}; active.spent[ab.id] = true; }
         }
-        lines = ['<b>' + esc(a.name) + '</b>' + (a.desc && !a.plain ? ' <i>' + esc(a.desc) + '</i>' : '')].concat(res(a, { name: active.name, ctx: { lvl: 1, pb: 2, mod: modsOf(active.abil) } }));
+        lines = ['<b>' + esc(a.name) + '</b>' + (a.desc && !a.plain ? ' <i>' + esc(a.desc) + '</i>' : '')].concat(res(a, { name: active.name, ctx: { lvl: 1, pb: 2, mod: modsOf(active.abil) }, holder: active }));
       }
       U.saveCombat(); U.logAdd(who, lines); U.render();
     },

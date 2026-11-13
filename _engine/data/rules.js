@@ -60,7 +60,10 @@ window.DND = window.DND || {};
     'Unconscious': 'Incapacitated, Prone, drop what you hold. Fail STR/DEX saves. Hits within 5 ft are crits.',
     'Concentrating': '(reminder) Taking damage → CON save DC 10 or half the damage (max 30).',
     'Raging': '(reminder) Barbarian Rage active.',
-    'Hidden': '(reminder) Enemies don\'t know where you are.'
+    'Hidden': '(reminder) Enemies don\'t know where you are. Your next attack has Advantage.',
+    'Blessed': 'Bless: +1d4 to attack rolls and saving throws (the app adds it).',
+    'Helped': 'Help: the next attack roll has Advantage (the app uses it up).',
+    'Dodging': 'Dodge: attacks against you have Disadvantage, your DEX saves Advantage (until your next turn).'
   };
 
   D.MASTERIES = {

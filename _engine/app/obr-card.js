@@ -28,14 +28,14 @@ export function startCard(OBR, opts) {
     const game = () => (DM ? get('curGame', null) : '');
     const gk = k => (DM ? 'g.' + game() + '.' + k : k);
     let item = null, point = null, mode = 'normal', note = '', view = null; // view: null | { multi: entry } | { area: entry, pt, picked }
-    let busy = false, floor = false;
+    let busy = false, floor = false, askId = '';
 
     // ---------- what was clicked ----------
     async function load() {
       item = null; point = null; floor = false;
       try {
         if (POP) {
-          const c = get('obrPop', null) || {};
+          const c = get('obrPop', null) || {}; askId = c.ask || '';
           if (c.id) item = (await OBR.scene.items.getItems([c.id]))[0] || null;
           point = c.point || null;
         } else {
@@ -125,9 +125,10 @@ export function startCard(OBR, opts) {
       finally { busy = false; }
     }
     async function build() {
+      if (POP && askId) return askView(); // the DM's app asks me something (save / Shield / opportunity attack)
       const lk = linkOf(item);
       if (!item && !point && !floor) return '<p class="tc-msg">' + tr('Select one token.', 'Выдели один токен.') + '</p>';
-      if (DM) return dmCard(lk);
+      if (DM) return dmFight(lk) + dmCard(lk);
       const f = fightPub();
       if (f && f.on) { const w = await fightWindow(f, lk); if (w) return w; }
       if (!item) return '<p class="tc-msg">' + tr('No fight right now — nothing to cast here.', 'Сейчас нет боя — здесь нечего применять.') + '</p>';
@@ -156,8 +157,30 @@ export function startCard(OBR, opts) {
       const s = ST[e.st] || ST.ok;
       return head('', e.n, s[2] + ' ' + (ruOn() ? s[1] : s[0])) + conds(e.cond);
     }
+    // the DM in a fight: whoever acts now (a monster, or the DM's own hero) → its attacks against the clicked creature, with the chance to hit
+    function dmFight(lk) {
+      const f = fightPub(); if (!f || !f.on) return '';
+      const L = f.list || []; const act = L[f.turn]; if (!act) return '';
+      let h = '<div class="tc-turn">⚔️ ' + tr('Now acts', 'Сейчас ходит') + ': <b>' + esc(act.n) + '</b></div>';
+      const next = '<div class="tc-row"><button data-do="dmnext">⏭ ' + tr('Next turn', 'Следующий ход') + '</button></div>';
+      if (!f.acts) return h + '<p class="tc-hint">' + tr('A player\'s hero — the player acts himself.', 'Это герой игрока — он ходит сам.') + '</p>' + next;
+      const tgt = lk ? entryOfLink(lk) : null;
+      const pct = (hit, ac) => { let p = Math.max(0.05, Math.min(0.95, (21 - (ac - hit)) / 20)); if (mode === 'adv') p = 1 - (1 - p) * (1 - p); if (mode === 'dis') p = p * p; return Math.round(p * 100); };
+      const btn = (a, tid) => '<button data-dmact="' + esc(a.id) + '" data-tid="' + esc(tid) + '"' + (a.blocked ? ' disabled' : '') + '><b>' + esc(a.n) + (a.heal ? ' ❤️' : '') + '</b><small>' + esc(a.info || '') +
+        (a.hit != null && tgt && tgt.ac != null ? ' · 🎯 ' + pct(a.hit, Number(tgt.ac)) + '%' : '') + (a.left != null ? ' · ' + tr('left', 'осталось') + ' ' + a.left : '') + (a.blocked ? ' · ' + tr('used', 'потрачено') : '') + '</small></button>';
+      if (tgt && tgt.id !== act.id) {
+        h += '<h4>🎯 ' + esc(act.n) + ' → ' + esc(tgt.n) + (tgt.ac != null ? ' (' + tr('AC', 'КД') + ' ' + esc(tgt.ac) + ')' : '') + '</h4>' +
+          '<div class="tc-row tc-mode">' + [['normal', tr('Normal', 'Обычно')], ['adv', '⬆ ' + tr('Advantage', 'Преимущество')], ['dis', '⬇ ' + tr('Disadvantage', 'Помеха')]].map(m => '<button data-mode="' + m[0] + '" class="' + (mode === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>' +
+          '<div class="tc-acts">' + f.acts.filter(a => !a.area).map(a => btn(a, tgt.id)).join('') + '</div>';
+      } else if (tgt && tgt.id === act.id) {
+        const self = f.acts.filter(a => a.heal); if (self.length) h += '<h4>❤️ ' + tr('On itself', 'На себя') + '</h4><div class="tc-acts">' + self.map(a => btn(a, act.id)).join('') + '</div>';
+      }
+      const area = f.acts.filter(a => a.area);
+      if (area.length && (!item || tgt)) h += '<h4>💥 ' + tr('Areas — hits every hero', 'Области — по всем героям') + '</h4><div class="tc-acts">' + area.map(a => btn(a, '__all')).join('') + '</div>';
+      return h + next;
+    }
     function dmCard(lk) {
-      if (!item) return '<p class="tc-msg">' + tr('Click a token.', 'Кликни по токену.') + '</p>';
+      if (!item) return (fightPub() || {}).on ? '' : '<p class="tc-msg">' + tr('Click a token.', 'Кликни по токену.') + '</p>';
       if (!lk) return linkChooser();
       return lk.k === 'pc' ? heroCard(lk) : monCard(lk);
     }
@@ -311,6 +334,38 @@ export function startCard(OBR, opts) {
       return h;
     }
 
+    // ---------- the DM's app asks me: roll my save / Shield? / hit the one running away ----------
+    const ABN = { STR: ['STR', 'СИЛ'], DEX: ['DEX', 'ЛОВ'], CON: ['CON', 'ТЕЛ'], INT: ['INT', 'ИНТ'], WIS: ['WIS', 'МДР'], CHA: ['CHA', 'ХАР'] };
+    const abn = k => (ABN[k] ? tr(ABN[k][0], ABN[k][1]) : k);
+    const sgn = n => (n >= 0 ? '+' : '') + n;
+    function askView() {
+      const m = get('obrAsk', null);
+      if (!m || m.id !== askId) return '<p class="tc-msg">' + tr('Nothing to answer now.', 'Сейчас отвечать не на что.') + '</p>';
+      const hero = get('obrmenu', []).find(x => x.cid === m.cid) || { acts: [], saves: {} };
+      if (m.done) return head('', hero.n || m.hero || '', '') + '<p class="tc-msg">' + m.done + '</p>';
+      if (m.type === 'saveReq') {
+        const b = (hero.saves || {})[m.abil] || 0;
+        return head('🎲', tr('Saving throw', 'Спасбросок') + ' ' + abn(m.abil), esc(m.what || '') + (m.by ? ' — ' + esc(m.by) : '')) +
+          '<p class="tc-hint">' + tr('Roll d20', 'Брось d20') + ' ' + sgn(b) + ' — ' + tr('you need', 'нужно') + ' <b>' + m.dc + '</b> ' + tr('or more', 'или больше') + '.' + (m.mode === 'adv' ? ' ⬆ ' + tr('Advantage', 'С преимуществом') : m.mode === 'dis' ? ' ⬇ ' + tr('Disadvantage', 'С помехой') : '') + '</p>' +
+          '<div class="tc-row"><button class="primary big" data-ans="save">🎲 ' + tr('Roll', 'Бросить') + ' ' + abn(m.abil) + ' ' + sgn(b) + '</button></div>';
+      }
+      if (m.type === 'shieldReq') {
+        return head('🛡', tr('You are hit!', 'По тебе попали!'), esc(m.by || '') + ' — ' + esc(m.what || '')) +
+          '<p class="tc-hint">' + tr('Attack', 'Атака') + ' <b>' + m.total + '</b> ' + tr('vs your AC', 'против твоего КД') + ' ' + m.ac + '. ' + tr('Shield gives +5 AC until your next turn → this attack misses. Costs your reaction and a level 1 slot.', 'Щит даёт +5 КД до твоего следующего хода → эта атака промахнётся. Тратит реакцию и ячейку 1 уровня.') + '</p>' +
+          '<div class="tc-row"><button class="primary" data-ans="shield-yes">🛡 ' + tr('Yes, Shield', 'Да, Щит') + '</button><button data-ans="shield-no">' + tr('No', 'Нет') + '</button></div>';
+      }
+      const melee = (hero.acts || []).filter(a => a.k === 'weapon' && (!a.rng || a.rng.k === 'melee'));
+      return head('⚔️', esc(m.n || '') + ' ' + tr('runs away!', 'уходит!'), tr('Opportunity attack: one hit, costs your reaction', 'Провоцированная атака: один удар, тратит реакцию')) +
+        '<div class="tc-acts">' + melee.map(a => '<button data-oa="' + esc(a.id) + '"><b>' + esc(a.n) + '</b><small>' + esc(a.info || '') + '</small></button>').join('') + '</div>' +
+        '<div class="tc-row"><button data-ans="oa-no">' + tr('Let it go', 'Пусть уходит') + '</button></div>';
+    }
+    async function answer(msg, doneTxt) {
+      const m = get('obrAsk', null); if (!m) return;
+      try { if (msg) await OBR.broadcast.sendMessage(CH, Object.assign({ id: m.id }, msg)); } catch (e) {}
+      m.done = doneTxt; set('obrAsk', m); render();
+      setTimeout(() => { try { OBR.popover.close(POP_ID); } catch (e) {} }, 2200);
+    }
+
     // ---------- send to the DM ----------
     async function send(req) {
       let player = ''; try { player = await OBR.player.getName(); } catch (er) {}
@@ -337,6 +392,32 @@ export function startCard(OBR, opts) {
         await load(); render(); return;
       }
       if (b.dataset.mode) { mode = b.dataset.mode; render(); return; }
+      if (b.dataset.ans || b.dataset.oa) {
+        const m = get('obrAsk', null); if (!m) return;
+        if (b.dataset.ans === 'save') {
+          const hero = get('obrmenu', []).find(x => x.cid === m.cid) || {}; const bn = (hero.saves || {})[m.abil] || 0;
+          const d1 = 1 + Math.floor(Math.random() * 20), d2 = 1 + Math.floor(Math.random() * 20);
+          const nat = m.mode === 'adv' ? Math.max(d1, d2) : m.mode === 'dis' ? Math.min(d1, d2) : d1;
+          const tot = nat + bn;
+          answer({ type: 'saveRes', nat }, '🎲 ' + (m.mode === 'adv' || m.mode === 'dis' ? d1 + ', ' + d2 + ' → ' : '') + nat + ' ' + sgn(bn) + ' = <b>' + tot + '</b> ' + (tot >= m.dc ? '≥ ' + m.dc + ' — ' + tr('looks like a success!', 'похоже, устоял!') : '&lt; ' + m.dc + ' — ' + tr('looks like a fail…', 'похоже, провал…')) + '<br><small>' + tr('The DM\'s app adds the rest (Bless…) and writes the result to the log.', 'Приложение мастера добавит остальное (Благословение…) и запишет итог в журнал.') + '</small>');
+        } else if (b.dataset.ans === 'shield-yes') answer({ type: 'shieldRes', yes: true }, '🛡 ' + tr('Shield!', 'Щит!'));
+        else if (b.dataset.ans === 'shield-no') answer({ type: 'shieldRes', yes: false }, tr('No Shield.', 'Без Щита.'));
+        else if (b.dataset.ans === 'oa-no') answer(null, tr('You let it go.', 'Ты его отпустил.'));
+        else if (b.dataset.oa) {
+          const hero = get('obrmenu', []).find(x => x.cid === m.cid) || {};
+          let player = ''; try { player = await OBR.player.getName(); } catch (er) {}
+          try { await OBR.broadcast.sendMessage(CH, { type: 'act', req: { id: Math.random().toString(36).slice(2, 10), t: Date.now(), cid: m.cid, aid: b.dataset.oa, tid: m.tid, ttok: m.ttok, oa: 1, mode: 'normal', from: hero.n || '', player } }); } catch (er) {}
+          answer(null, '⚔️ ' + tr('Sent — see the log.', 'Отправлено — смотри журнал.'));
+        }
+        return;
+      }
+      if (DM && (b.dataset.dmact || b.dataset.do === 'dmnext')) { // to the DM's panel (online.js → dmAct): it rolls and applies
+        const Q = get('obrActQ', []); Q.push({ id: Math.random().toString(36).slice(2, 10), t: Date.now(), dm: 1, kind: b.dataset.dmact ? 'act' : 'next', aid: b.dataset.dmact || '', tid: b.dataset.tid || '', mode });
+        set('obrActQ', Q.slice(-20)); mode = 'normal';
+        note = b.dataset.dmact ? '🎲 ' + tr('Rolled — see the log.', 'Брошено — смотри журнал.') : '⏭ ' + tr('Next turn.', 'Следующий ход.');
+        try { if (!(await OBR.action.isOpen())) await OBR.action.open(); } catch (e) {} // the panel does the roll: it must be open
+        setTimeout(render, 700); return;
+      }
       if (b.dataset.act && lastCtx) {
         const a = (lastCtx.hero.acts || []).find(x => x.id === b.dataset.act); if (!a) return;
         if (a.area) { view = { area: a, pt: point || null }; if (POP && a.area.o !== 'u') set('obrAim', { t: Date.now(), point: point || (lastCtx.tb && lastCtx.tb.center) || null }); render(); return; }
@@ -387,6 +468,7 @@ export function startCard(OBR, opts) {
     window.addEventListener('storage', e => {
       const k = e.key || '';
       if (POP && k === P + 'obrPop') { view = null; note = ''; clearPreview(); soon(); return; } // a new click with the tool
+      if (POP && k === P + 'obrAsk') { soon(); return; }
       if (k === P + 'obrAim' && view && view.area) { soon(); return; } // the area moved
       if (/obrstate|obrdm|obrmenu|combat|chars/.test(k)) soon();
     });

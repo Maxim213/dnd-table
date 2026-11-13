@@ -142,9 +142,9 @@ window.UI = (function () {
             col.classList.add(keep ? 'keep' : 'drop'); col.querySelector('small').textContent = keep ? '✓ ' + T('kept') : '✗';
           }
         });
-        if (two) el.querySelector('.why').innerHTML = (d.label ? '<small>' + esc(d.label) + '</small> · ' : '') + (d.mode === 'adv' ? '<span class="adv">' + T('Advantage: the higher die counts') + '</span>' : '<span class="dis">' + T('Disadvantage: the lower die counts') + '</span>');
+        if (two && el.querySelector('.why')) el.querySelector('.why').innerHTML = (d.label ? '<small>' + esc(d.label) + '</small> · ' : '') + (d.mode === 'adv' ? '<span class="adv">' + T('Advantage: the higher die counts') + '</span>' : '<span class="dis">' + T('Disadvantage: the lower die counts') + '</span>');
         const sum = !two && d.dice.length > 1 ? d.dice.map((v, i) => (i && v >= 0 ? '+ ' : '') + v).join(' ') + (d.more ? ' + …' : '') : String(d.used);
-        el.querySelector('.tot').innerHTML = d.bonus || (!two && d.dice.length > 1) ? sum + (d.bonus ? ' ' + sign(d.bonus) : '') + ' = <b>' + d.total + '</b>' : '<b>' + d.total + '</b>';
+        const tt = el.querySelector('.tot'); if (tt) tt.innerHTML = d.bonus || (!two && d.dice.length > 1) ? sum + (d.bonus ? ' ' + sign(d.bonus) : '') + ' = <b>' + d.total + '</b>' : '<b>' + d.total + '</b>';
       }
       setTimeout(() => { el.className = ''; if (done) done(); }, two ? 1000 : 520);
     }
@@ -242,6 +242,42 @@ window.UI = (function () {
     U.opt(0, T('until removed'), 0) + [1, 2, 3, 5, 10].map(n => U.opt(n, T(n === 1 ? '{0} round' : '{0} rounds', n) + (n === 10 ? ' ' + T('(1 min)') : ''), 0)).join('') + '</select></span>';
   U.durOf = el => { const s = el.parentNode && el.parentNode.querySelector('.durSel'); return s ? Number(s.value) || 0 : 0; };
 
+  // ---------- conditions and buffs change the rolls by themselves (D&D 2024) ----------
+  // Extra marks the app puts on creatures: Blessed (+1d4 attacks & saves), Helped (Advantage on the next attack), Hidden (Advantage on the next attack),
+  // Dodging (attacks against it: Disadvantage, its DEX saves: Advantage). They live in .conditions like the others.
+  const has = (h, c) => !!(h && Array.isArray(h.conditions) && h.conditions.includes(c));
+  U.rollEdge = function (att, tgt, act) { // → { adv: [why…], dis: [why…], crit: bool } for an attack roll
+    const A = att && att.holder, G = tgt && tgt.holder; const adv = [], dis = [];
+    const melee = act.scope ? act.scope !== 'ranged' : act.kind === 'spell' ? /touch|касан/i.test(String(((D.SPELLS.find(s => 'sp:' + s.n === act.id) || {}).r) || '')) : act.kind !== 'weapon' || !/ranged/.test(act.scope || '');
+    const W = n => t(n);
+    ['Blinded', 'Poisoned', 'Prone', 'Restrained', 'Frightened'].forEach(c => { if (has(A, c)) dis.push(T('you are {0}', W(c))); });
+    ['Invisible', 'Helped', 'Hidden'].forEach(c => { if (has(A, c)) adv.push(T('you are {0}', W(c))); });
+    ['Blinded', 'Paralyzed', 'Petrified', 'Restrained', 'Stunned', 'Unconscious'].forEach(c => { if (has(G, c)) adv.push(T('the target is {0}', W(c))); });
+    const close = S.near != null ? S.near : melee; // distance on the map when known (online), else melee = next to it
+    if (has(G, 'Prone')) (close ? adv : dis).push(T('the target is {0}', W('Prone')) + (close ? '' : ' ' + T('(far away)')));
+    ['Invisible', 'Dodging'].forEach(c => { if (has(G, c)) dis.push(T('the target is {0}', W(c))); });
+    return { adv, dis, crit: close && (has(G, 'Paralyzed') || has(G, 'Unconscious')) };
+  };
+  U.mixMode = (base, e) => { const a = (base === 'adv' ? 1 : 0) + e.adv.length, d = (base === 'dis' ? 1 : 0) + e.dis.length; return a && d ? 'normal' : a ? 'adv' : d ? 'dis' : 'normal'; };
+  U.edgeTxt = e => (e.adv.length ? ' <small class="edge adv">⬆ ' + esc(e.adv.join(', ')) + '</small>' : '') + (e.dis.length ? ' <small class="edge dis">⬇ ' + esc(e.dis.join(', ')) + '</small>' : '');
+  U.blessDie = h => { if (has(h, 'Blessed')) { const r = E.rollExpr('1d4', {}); return { v: r.total, txt: ' + 🙏' + r.total }; } return { v: 0, txt: '' }; };
+  // concentration: damage → CON save DC max(10, half) rolled at once; a fail ends the spell (and what it gave to others)
+  U.concCheck = function (h, n, conMod) {
+    if (!has(h, 'Concentrating') || !(n > 0)) return '';
+    const dc = Math.min(30, Math.max(10, Math.floor(n / 2))); const b = U.blessDie(h); const r = E.rollD20(conMod || 0, 'normal'); const tot = r.total + b.v; const ok = tot >= dc;
+    if (!ok) U.endConc(h);
+    return '🧠 ' + T('Concentration') + ': 🎲 ' + r.nat + ' ' + E.sign(conMod || 0) + b.txt + ' = ' + tot + ' ' + (ok ? '≥' : '&lt;') + ' ' + T('DC') + ' ' + dc + ' → ' + (ok ? T('holds on') : '<b class="fail">' + T('lost — the spell ends') + '</b>');
+  };
+  U.endConc = function (h) {
+    U.delCond(h, 'Concentrating');
+    (h.concGave || []).forEach(g => {
+      (g.cids || []).forEach(id => { const c = U.byId(id); if (!c) return; if (g.cond) U.delCond(c, g.cond); if (g.toggle) delete c.toggles[g.toggle]; });
+      (g.eids || []).forEach(id => { const m = ((S.combat && S.combat.list) || []).find(x => x.id === id); if (m && g.cond) U.delCond(m, g.cond); });
+    });
+    h.concGave = [];
+    if (h.toggles) Object.keys(h.toggles).forEach(k => { if (k.indexOf('spell:') === 0 && k !== 'spell:Mage Armor') { const sp = D.SPELLS.find(s => 'spell:' + s.n === k); if (sp && sp.conc) delete h.toggles[k]; } });
+  };
+
   // ======================================================================
   //  RESOLVER — rolls an action (attack, spell, feature, monster ability) vs a target
   //  and writes every step in plain words: roll + bonus = total vs AC → hit/miss → damage → HP.
@@ -250,7 +286,7 @@ window.UI = (function () {
   const diceOf = r => r.text.replace(/^d20\((.*?)\).*$/, '$1'); // "16" or "15, 16 → 16"
   const hpTxt = (tg, before) => { if (!tg || !tg.hpNow) return ''; const now = tg.hpNow(); return now === before ? '' : ' <span class="hpchg">' + T('HP {0} → {1}', before, now) + '</span>'; };
   U.resolve = function (act, attacker, target) {
-    const ctx = attacker.ctx; const mode = act.hit != null ? U.takeMode() : 'normal'; const L = [];
+    const ctx = attacker.ctx; const edge = act.hit != null && target && !Array.isArray(target) ? U.rollEdge(attacker, target, act) : null; const mode = act.hit != null ? (edge ? U.mixMode(U.takeMode(), edge) : U.takeMode()) : 'normal'; const L = [];
     const mult = act.mult || 1;
     const multTxt = mult !== 1 ? ' <span class="mult">×' + mult + (act.multSrc ? ' ' + esc(act.multSrc) : '') + '</span>' : '';
     const tName = tg => '<b>' + esc(tg.name) + '</b>';
@@ -277,20 +313,27 @@ window.UI = (function () {
       } else {
         if (dm) L.push('💥 ' + T('Damage rolled') + ': <b class="big dmg">' + dm.total + '</b> ' + dtype + ' <small>' + dm.text + '</small>' + multTxt + (act.half ? ' ' + T('(half if they resist)') : ''));
         targets.forEach(tg => {
-          const bonus = tg.saveMod(act.save.abil); const sv = E.rollD20(bonus, 'normal'); const ok = sv.total >= act.save.dc;
+          const bonus = tg.saveMod(act.save.abil); const G = tg.holder; const ab0 = act.save.abil; const autoFail = (ab0 === 'STR' || ab0 === 'DEX') && ['Paralyzed', 'Stunned', 'Unconscious', 'Petrified'].some(c => has(G, c));
+          const smode = ab0 === 'DEX' && has(G, 'Dodging') && !has(G, 'Restrained') ? 'adv' : ab0 === 'DEX' && has(G, 'Restrained') && !has(G, 'Dodging') ? 'dis' : 'normal'; const bl = U.blessDie(G);
+          // a player's hero online: the player rolls this save himself (online.js → U.askSave); the damage waits for his roll
+          if (U.askSave && tg.pc && tg.pc.obr && U.askSave(tg, { abil: ab0, dc: act.save.dc, dm: dm ? dm.total : 0, dtype: act.dtype || '', half: !!act.half, cond: act.cond || '', condRounds: act.condRounds || 0, what: act.name, by: attacker.name, autoFail, smode })) {
+            L.push(tName(tg) + ' — ' + T('{0} save', ab) + ' ' + T('DC') + ' ' + act.save.dc + ': ⏳ ' + T('the player rolls it himself…')); return;
+          }
+          const sv = E.rollD20(bonus, smode); sv.total += bl.v; const ok = !autoFail && sv.total >= act.save.dc;
           const fin = dm ? (ok ? (act.half ? Math.floor(dm.total / 2) : 0) : dm.total) : 0;
           const before = tg.hpNow ? tg.hpNow() : null;
           let notes = []; if (fin > 0) notes = tg.damage(fin);
           if (!ok && act.cond) { tg.cond(act.cond, act.condRounds); notes.push(t(act.cond) + (act.condRounds ? ' ' + T('for {0} rounds', act.condRounds) : '')); }
-          L.push(tName(tg) + ' — ' + T('{0} save', ab) + ': 🎲 ' + diceOf(sv) + ' ' + sign(bonus) + ' = <b class="big">' + sv.total + '</b> ' + (ok ? '≥' : '&lt;') + ' ' + T('DC') + ' ' + act.save.dc + ' → ' +
+          L.push(tName(tg) + ' — ' + T('{0} save', ab) + ': 🎲 ' + diceOf(sv) + ' ' + sign(bonus) + bl.txt + (autoFail ? ' <small>(' + T('auto-fail: {0}', G.conditions.filter(c => ['Paralyzed', 'Stunned', 'Unconscious', 'Petrified'].includes(c)).map(c => t(c)).join(', ')) + ')</small>' : '') + ' = <b class="big">' + sv.total + '</b> ' + (ok ? '≥' : '&lt;') + ' ' + T('DC') + ' ' + act.save.dc + ' → ' +
             (ok ? '<b class="ok">' + T('RESISTED') + '</b>' : '<b class="fail">' + T('FAILED') + '</b>') + (dm ? ' · ' + T('takes {0}', '<b class="dmg">' + fin + '</b>') : '') + (before != null ? hpTxt(tg, before) : '') + notesTxt(notes));
         });
       }
     } else if (act.hit != null) {
       for (let i = 0; i < (act.count || 1); i++) {
-        const r = E.rollD20(act.hit, mode, attacker.luck); const crit = r.nat >= (act.critRange || 20); const nat1 = r.nat === 1;
+        const r = E.rollD20(act.hit, mode, attacker.luck); const bl = U.blessDie(attacker.holder); r.total += bl.v; const nat1 = r.nat === 1;
+        let crit = r.nat >= (act.critRange || 20); if (!crit && edge && edge.crit && target && !nat1 && r.total >= target.ac) crit = true; // Paralyzed / Unconscious, hit from 5 ft = critical
         const pre = (act.count > 1 ? '#' + (i + 1) + ' ' : '');
-        const sum = '🎲 ' + diceOf(r) + ' ' + sign(act.hit) + ' = <b class="big">' + r.total + '</b>';
+        const sum = '🎲 ' + diceOf(r) + ' ' + sign(act.hit) + bl.txt + ' = <b class="big">' + r.total + '</b>' + (i === 0 && edge ? U.edgeTxt(edge) : '');
         const critTxt = crit ? ' <b class="crit">' + T('CRITICAL! Damage dice are doubled.') + '</b>' : '';
         const n1 = nat1 ? ' <b class="fail" data-nat1>' + T('natural 1 = always a miss') + '</b>' : '';
         if (!target) {
@@ -303,6 +346,14 @@ window.UI = (function () {
           const hit = crit || (!nat1 && r.total >= target.ac);
           const vs = ' ' + (hit ? '≥' : '&lt;') + ' ' + T('AC') + ' ' + target.ac;
           const before = target.hpNow ? target.hpNow() : null;
+          // a player's hero who knows Shield (+5 AC would turn this hit into a miss): the player decides (online.js → U.askShield)
+          if (hit && !crit && i === 0 && U.askShield && target.pc && target.pc.obr && r.total < target.ac + 5) {
+            const dm0 = act.dmg ? roll(crit) : { total: 0, text: '' };
+            if (U.askShield(target, { total: r.total, ac: target.ac, dm: dm0, cond: act.cond || '', condRounds: act.condRounds || 0, what: act.name, by: attacker.name, dtype })) {
+              L.push(pre + '🎯 ' + T('HIT') + ' ' + tName(target) + ': ' + sum + vs + modeTxt + ' · ⏳ ' + T('{0} may cast Shield (+5 AC) — waiting for the player…', esc(target.name)));
+              continue;
+            }
+          }
           if (hit) {
             const dm = act.dmg ? roll(crit) : { total: 0, text: '' }; const notes = target.damage(dm.total);
             if (act.cond) { target.cond(act.cond, act.condRounds); notes.push(t(act.cond)); }
@@ -315,6 +366,7 @@ window.UI = (function () {
           }
         }
       }
+      if (attacker.holder) ['Helped', 'Hidden'].forEach(c => U.delCond(attacker.holder, c)); // used up by this attack
     } else if (act.plain) {
       if (act.dmg) { const r = E.rollExpr(act.dmg, { ctx }); L.push(T('rolls') + ' <b class="big">' + r.total + '</b> <small>' + r.text + '</small>'); }
       if (act.desc) L.push('<i>' + esc(act.desc) + '</i>');
@@ -352,9 +404,9 @@ window.UI = (function () {
   U.pcTarget = function (c) {
     const d = E.compute(c);
     return {
-      name: c.name || T('Unnamed'), ac: d.ac, saveMod: a => d.saves[a].val,
+      name: c.name || T('Unnamed'), ac: d.ac, saveMod: a => d.saves[a].val, holder: c, pc: c,
       hpNow: () => E.compute(c).hpCur,
-      damage: n => { const r = E.damageChar(c, n); U.saveChars(); return r; },
+      damage: n => { const r = E.damageChar(c, n).filter(x => !/Concentration|Концентрац/.test(x)); const cc = U.concCheck(c, n, d.saves.CON.val); if (cc) r.push(cc); U.saveChars(); return r; },
       heal: n => { E.healChar(c, n); U.saveChars(); },
       temp: n => { c.hp.temp = Math.max(Number(c.hp.temp) || 0, n); U.saveChars(); },
       cond: (name, r) => { U.addCond(c, name, r); U.saveChars(); }
@@ -362,12 +414,12 @@ window.UI = (function () {
   };
   U.monTarget = function (m) {
     return {
-      name: m.name, ac: Number(m.ac) || 10, saveMod: a => E.modOf((m.abil || {})[a] || 10),
+      name: m.name, ac: Number(m.ac) || 10, saveMod: a => E.modOf((m.abil || {})[a] || 10), holder: m,
       hpNow: () => Number(m.hp) || 0,
       damage: n => {
         const notes = []; let tp = Number(m.temp) || 0; const ab = Math.min(tp, n); tp -= ab; m.temp = tp;
         m.hp = Math.max(0, (Number(m.hp) || 0) - (n - ab));
-        if (U.holder(m).conditions.includes('Concentrating')) notes.push(T('Concentration: CON save DC {0}', Math.min(30, Math.max(10, Math.floor(n / 2)))));
+        const cc = U.concCheck(U.holder(m), n - ab, E.modOf((m.abil || {}).CON || 10)); if (cc) notes.push(cc);
         if (m.hp === 0) notes.push(T('defeated') + ' 💀');
         else if (m.hp <= (Number(m.hpMax) || 1) / 2) notes.push(T('bloodied — maybe it flees?'));
         U.saveCombat(); return notes;
@@ -378,7 +430,7 @@ window.UI = (function () {
     };
   };
   U.cbTarget = cb => { if (cb.type === 'pc') { const c = U.byId(cb.charId); return c ? U.pcTarget(c) : null; } return U.monTarget(cb); };
-  U.attackerOf = c => { const d = E.compute(c); return { name: c.name || T('Hero'), ctx: d.x, luck: d.luck }; };
+  U.attackerOf = c => { const d = E.compute(c); return { name: c.name || T('Hero'), ctx: d.x, luck: d.luck, holder: c }; };
 
   // ======================================================================
   //  SIDE PANEL — dice + log

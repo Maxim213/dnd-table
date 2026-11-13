@@ -177,6 +177,16 @@ export function startBackground(OBR, by) {
       else if (m.type === 'heroSet') takeHero(m);
       else if (m.type === 'act' && DM && m.req) takeAct(m.req);
       else if (m.type === 'note' && m.to === OBR.player.id && m.text) { try { OBR.notification.show(String(m.text).slice(0, 160), 'WARNING'); } catch (e) {} }
+      // the DM's app waits for a player's answer (a save he rolls himself, Shield yes / no)
+      else if (DM && (m.type === 'saveRes' || m.type === 'shieldRes') && m.id) { const A = get('obrAns', []); A.push({ type: m.type, id: m.id, nat: m.nat, yes: m.yes }); set('obrAns', A.slice(-20)); }
+      // a player: "roll your save", "Shield?", "it runs away — hit it?" → the token window opens with the buttons
+      else if (!DM && m.to === OBR.player.id && (m.type === 'saveReq' || m.type === 'shieldReq' || m.type === 'oaOffer')) {
+        set('obrAsk', Object.assign({ t: Date.now() }, m));
+        const txt = m.type === 'saveReq' ? '🎲 ' + tr('Saving throw!', 'Спасбросок!') + ' ' + (m.abil || '') + ' ' + tr('DC', 'СЛ') + ' ' + m.dc + ' — ' + (m.what || '')
+          : m.type === 'shieldReq' ? '🛡 ' + tr('You are hit — cast Shield?', 'По тебе попали — Щит?') : '⚔️ ' + (m.n || '') + ' ' + tr('runs away from you — hit it?', 'уходит от тебя — ударить?');
+        say(txt, 'WARNING');
+        (async () => { let c = { x: 600, y: 300 }; try { const w = await OBR.viewport.getWidth(); const h = await OBR.viewport.getHeight(); const s = await OBR.viewport.getScale(); const p = await OBR.viewport.getPosition(); c = { x: (w / 2 - 180 - p.x) / s, y: (h / 2 - p.y) / s }; } catch (e) {} openPop({ id: '', point: null, ask: m.id }, c); })();
+      }
     });
     if (DM) {
       OBR.party.onChange(players => mergeHeroes(players));

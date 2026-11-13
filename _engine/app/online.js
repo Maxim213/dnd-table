@@ -106,9 +106,22 @@
       let d = null; try { d = E.compute(c); } catch (e) {}
       return { id: c.id, n: c.name || T('Unnamed'), cls: c.classKey || '', lvl: c.level, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, cond: (c.conditions || []).slice(0, 6) };
     });
+    // the DM's token window: what the one who acts now can do (attacks of a monster, or of the DM's own hero)
+    let acts;
+    if (priv && cb.turn >= 0 && cb.list[cb.turn]) {
+      const x = cb.list[cb.turn];
+      try {
+        let A = [], ctx = null;
+        if (x.type === 'mon') A = U.monActions ? U.monActions(x) : [];
+        else { const c = U.byId(x.charId); if (c && !c.obr) { const d = E.compute(c); ctx = d.x; A = d.actions.filter(a => (a.kind !== 'weapon' || a.equipped || a.id === 'unarmed') && (a.hit != null || a.save || a.heal || a.dmg)); } }
+        const sub = s => ctx ? String(s).replace(/@(STR|DEX|CON|INT|WIS|CHA|LVL|PB)/gi, (m0, k) => { k = k.toUpperCase(); return k === 'LVL' ? ctx.lvl : k === 'PB' ? ctx.pb : ctx.mod[k]; }) : String(s);
+        acts = A.slice(0, 30).map(a => ({ id: a.id, n: a.name, hit: a.hit != null ? a.hit : null, save: a.save || null, heal: !!(a.heal || a.temp), area: !!(a.area || (a.save && a.hit == null && x.type === 'pc')), blocked: !!a.blocked, left: a.left != null ? a.left : null, info: (a.hit != null ? U.sign(a.hit) + ' ' : '') + (a.save ? T('DC') + ' ' + a.save.dc + ' ' + (D.AB[a.save.abil] || a.save.abil) + ' ' : '') + (a.dmg ? sub(a.dmg) : '') + (a.count > 1 ? ' ×' + a.count : '') }));
+        if (x.type === 'pc' && U.byId(x.charId) && U.byId(x.charId).obr) acts = null; // a player's hero: the player acts himself
+      } catch (e) { acts = []; }
+    }
     let L2 = list, turn = cb.turn; // the players never learn about monsters whose tokens the DM hid
     if (!priv && hiddenMon.size) { const act = list[cb.turn]; L2 = list.filter(x => !(x.k === 'mon' && hiddenMon.has(x.id))); turn = act ? L2.indexOf(act) : -1; }
-    return { on: (cb.turn >= 0 && list.length > 0), round: cb.round || 0, turn, list: L2.slice(0, 40), party, game: U.game.name, strict: U.strict ? U.strict() : true };
+    return { on: (cb.turn >= 0 && list.length > 0), round: cb.round || 0, turn, list: L2.slice(0, 40), party, game: U.game.name, strict: U.strict ? U.strict() : true, acts: acts || undefined, mode: priv ? S.mode : undefined };
   }
   let stT = 0, lastSt = '', lastPriv = '';
   function queueState() {
@@ -279,9 +292,9 @@
     if (r.k === 'melee' && ft > r.n) return { ok: false, msg: T('Too far: {0} is {1} ft away, you reach {2} ft. Walk closer first.', tn, ft, r.n) };
     if (r.k === 'spell' && ft > r.n) return { ok: false, msg: T('Too far for this spell: {0} ft, the spell reaches {1} ft.', ft, r.n) + ' (' + tn + ')' };
     let dis = '';
-    if (r.k === 'ranged') {
-      if (ft > r.l) return { ok: false, msg: T('Too far even for a long shot: {0} ft (max {1} ft).', ft, r.l) };
-      if (ft > r.n) dis = T('long range ({0} ft > {1} ft)', ft, r.n);
+    if (r.k === 'ranged' || (r.k === 'spell' && a && a.hit != null && r.n > 5)) { // shooting (a bow or a spell attack like Fire Bolt)
+      if (r.l && ft > r.l) return { ok: false, msg: T('Too far even for a long shot: {0} ft (max {1} ft).', ft, r.l) };
+      if (r.k === 'ranged' && ft > r.n) dis = T('long range ({0} ft > {1} ft)', ft, r.n);
       if (!dis) { // shooting with an enemy right next to you
         const foes = cb.list.filter(x => x.type === 'mon' && (Number(x.hp) || 0) > 0);
         for (const f of foes) { const d0 = await feetBetween(actor, f, q.atok); if (d0 != null && d0 <= 5) { dis = T('an enemy is right next to you'); break; } }
@@ -338,12 +351,12 @@
       }
       ec[k]++; const top = S.log[0];
       if (b === 'dash') { ec.dash = true; U.logAdd(q.from, ['🏃 ' + T('Dash: you can move {0} ft this turn.', d.speed * 2)]); }
-      else if (b === 'dodge') { ec.dodge = true; U.logAdd(q.from, ['🛡 ' + T('Dodge: until your next turn attacks against you have Disadvantage, your DEX saves have Advantage.')]); }
+      else if (b === 'dodge') { ec.dodge = true; U.addCond(c, 'Dodging', 1); U.logAdd(q.from, ['🛡 ' + T('Dodge: until your next turn attacks against you have Disadvantage, your DEX saves have Advantage.')]); }
       else if (b === 'disengage') { ec.disengage = true; U.logAdd(q.from, ['🚪 ' + T('Disengage: moving away provokes no opportunity attacks this turn.')]); }
       else if (b === 'hide') {
-        const sk = d.skills && d.skills.Stealth ? d.skills.Stealth.val : d.mod.DEX; const r = E.rollD20(sk, 'normal'); const ok = r.total >= 15;
+        const sk = d.skills && d.skills.Stealth ? d.skills.Stealth.val : d.mod.DEX; const r = E.rollD20(sk, 'normal'); const ok = r.total >= 15; if (ok) U.addCond(c, 'Hidden');
         U.logAdd(q.from, ['🫥 ' + T('Hide: Stealth check') + ' 🎲 ' + r.nat + ' ' + U.sign(sk) + ' = <b class="big">' + r.total + '</b> ' + (ok ? '≥' : '&lt;') + ' 15 → ' + (ok ? '<b class="ok">' + T('hidden (enemies must find you)') + '</b>' : '<b class="fail">' + T('not hidden') + '</b>')]);
-      } else if (b === 'help') U.logAdd(q.from, ['🤝 ' + T('Help') + ' → <b>' + esc(tg.name) + '</b>: ' + T('the next attack roll or check of this ally (before your next turn) has Advantage.')]);
+      } else if (b === 'help') { if (tg.holder) U.addCond(tg.holder, 'Helped', 2); U.logAdd(q.from, ['🤝 ' + T('Help') + ' → <b>' + esc(tg.name) + '</b>: ' + T('the next attack roll or check of this ally (before your next turn) has Advantage.')]); }
       else if (b === 'grapple' || b === 'shove') {
         const dc = 8 + d.mod.STR + d.pb; const ab = tg.saveMod('STR') >= tg.saveMod('DEX') ? 'STR' : 'DEX'; const sm = tg.saveMod(ab); const r = E.rollD20(sm, 'normal'); const ok = r.total >= dc;
         const cond = b === 'grapple' ? 'Grappled' : 'Prone';
@@ -369,9 +382,21 @@
       const w = sp ? (sp.l >= 1 ? U.spendFor(c, d, { kind: 'spell', level: sp.l }) : '') : (f.uses ? U.spendFor(c, d, { res: f.id }) : '');
       if (/⚠️/.test(w)) return refuse(q, w.replace('⚠️', '').trim());
       if (cost !== '-') ec[cost] = (ec[cost] || 0) + 1;
-      if (sp && (sp.fx || sp.mageArmor || (sp.a === 'dmg' && sp.conc))) c.toggles['spell:' + sp.n] = true;
+      // who gets it: a spell with an effect (Shield of Faith +2 AC…) goes on the chosen heroes, Bless marks every target (+1d4)
+      const tgE = tids.filter(x => x !== '__all').map(id => cb.list.find(x => x.id === id)).filter(Boolean);
+      const gave = [];
+      if (sp && sp.conc) { if (c.conditions.includes('Concentrating')) U.endConc(c); U.addCond(c, 'Concentrating'); } // a new concentration spell ends the old one
+      if (sp && (sp.fx || sp.mageArmor || (sp.a === 'dmg' && sp.conc))) {
+        const heroes = (sp.a === 'dmg' || !tgE.length) ? [c] : tgE.filter(x => x.type === 'pc').map(x => U.byId(x.charId)).filter(Boolean);
+        heroes.forEach(h => { h.toggles['spell:' + sp.n] = true; });
+        if (sp.conc) gave.push({ toggle: 'spell:' + sp.n, cids: heroes.map(h => h.id) });
+      }
+      if (sp && sp.n === 'Bless') {
+        tgE.forEach(x => { const hd = x.type === 'pc' ? U.byId(x.charId) : x; if (hd) U.addCond(hd, 'Blessed', 10); });
+        gave.push({ cond: 'Blessed', cids: tgE.filter(x => x.type === 'pc').map(x => x.charId), eids: tgE.filter(x => x.type === 'mon').map(x => x.id) });
+      }
+      if (gave.length) c.concGave = gave;
       if (f && f.toggle) c.toggles[f.id] = true;
-      if (sp && sp.conc) U.addCond(c, 'Concentrating');
       const names = tids.filter(x => x !== '__all').map(tgOf).filter(Boolean).map(t => '<b>' + esc(t.name) + '</b>');
       const top = S.log[0];
       U.logAdd(q.from, ['✨ <b>' + esc(sp ? sp.name || sp.n : f.name) + '</b>' + (w ? ' <small>(' + w + ')</small>' : '') + (names.length ? ' → ' + names.join(', ') : '') + (sp && sp.conc ? ' · 🧠 ' + T('Concentration') : ''), '<i>' + esc((sp ? sp.desc : f.desc) || '') + '</i>']);
@@ -387,28 +412,118 @@
       else if (bad(true, T('Not your turn: only a reaction now (an opportunity attack or a reaction spell like Shield).'))) return '';
     }
     if (cost !== '-' && bad(ec[cost] >= 1, T('{0} is already used this turn.', T(U.ECON_NAME[cost])) + (cost === 'r' ? ' ' + T('It comes back at the start of your turn.') : ''))) return '';
-    let mode = q.mode, note = '';
+    let mode = q.mode, note = '', near = null;
     if (q.area && q.area.point) { // an area: its centre must be within the spell's range
       const r = rangeOf(a); const ft = r ? await feetToPoint(actor, q.area.point, q.atok) : null;
       if (ft != null) { note = '📏 ' + ft + ' ' + T('ft'); if (bad(ft > r.n, T('Too far for this spell: {0} ft, the spell reaches {1} ft.', ft, r.n))) return ''; }
     } else {
-      for (const tid of tids) { const rg = await checkRange(q, a, actor, tid); if (!rg.ok && bad(true, rg.msg)) return ''; if (rg.ok && tids.length === 1) mode = rg.mode; if (rg.note && !note) note = rg.note; }
+      if (!(q.oa && !own)) for (const tid of tids) { const rg = await checkRange(q, a, actor, tid); if (!rg.ok && bad(true, rg.msg)) return ''; if (rg.ok && tids.length === 1) { mode = rg.mode; near = rg.ft != null ? rg.ft <= 5 : null; } if (rg.note && !note) note = rg.note; } // an opportunity attack: the enemy just stepped away, it was in reach
     }
     const turn0 = cb.turn; const t0 = cb.target[actor.id]; const top = S.log[0];
-    cb.turn = ai; if (tids.length === 1) cb.target[actor.id] = tids[0]; S.mode = mode === 'adv' || mode === 'dis' ? mode : 'normal';
+    cb.turn = ai; if (tids.length === 1) cb.target[actor.id] = tids[0]; S.mode = mode === 'adv' || mode === 'dis' ? mode : 'normal'; S.near = q.oa ? true : near;
     const toast0 = U.toast; let why = ''; U.toast = h => { why = h; }; // a refusal (no slots / uses) comes as a toast: catch it
     try { U.ACT.cbAct({ aid: q.aid, remote: 1, cost, one, tids: tids.length > 1 || q.area ? tids.filter(x => x !== '__all') : null }); }
-    finally { U.toast = toast0; cb.turn = turn0; if (t0 === undefined) delete cb.target[actor.id]; else cb.target[actor.id] = t0; S.mode = 'normal'; U.saveCombat(); }
+    finally { U.toast = toast0; cb.turn = turn0; if (t0 === undefined) delete cb.target[actor.id]; else cb.target[actor.id] = t0; S.mode = 'normal'; S.near = null; U.saveCombat(); }
     if (!S.log[0] || S.log[0] === top) { U.logAdd(q.from || '?', ['⚠️ ' + (why || T('This action did not work.'))]); if (S.log[0]) { S.log[0].share = 1; U.saveLog(); } } // tell everyone why nothing happened
     else stamp(top, note);
     U.render(); return '';
   };
+  // ---------- 3g. the players roll their own saves, decide on Shield, get offered opportunity attacks ----------
+  // DM side: the roll waits (the log says "the player rolls it himself…"); the answer comes back through the background page (obrAns).
+  // No answer in 40 s (Shield: 20 s) → the app decides for him.
+  const pend = {};
+  const sendTo = (pid, msg) => { try { OBR.broadcast.sendMessage('dndtable/v1', Object.assign({ to: pid }, msg)); } catch (e) {} };
+  const playerSaves = () => { try { return localStorage.getItem('dnd.playerSaves') !== '0'; } catch (e) { return true; } };
+  const shareTop = () => { if (S.log[0]) { S.log[0].share = 1; U.saveLog(); } };
+  U.askSave = function (tg, o) {
+    if (!U.DM || !OBR || !playerSaves()) return false;
+    const c = tg.pc; const id = E.uid();
+    const finish = (nat, by) => {
+      if (!pend[id]) return; clearTimeout(pend[id].timer); delete pend[id];
+      const bonus = tg.saveMod(o.abil); const bl = U.blessDie(c);
+      const roll = nat == null ? E.rollD20(bonus, o.smode) : { nat, total: nat + bonus };
+      const total = roll.total + bl.v; const ok = !o.autoFail && total >= o.dc;
+      const fin = o.dm ? (ok ? (o.half ? Math.floor(o.dm / 2) : 0) : o.dm) : 0;
+      const before = tg.hpNow(); let notes = []; if (fin > 0) notes = tg.damage(fin);
+      if (!ok && o.cond) { tg.cond(o.cond, o.condRounds); notes.push(esc(D.t ? D.t(o.cond) : o.cond)); }
+      const now = tg.hpNow();
+      U.logAdd(c.name, ['🛡 ' + T('{0} save', D.AB[o.abil] || o.abil) + ' — ' + esc(o.what || '') + ': 🎲 ' + roll.nat + ' ' + U.sign(bonus) + bl.txt + ' = <b class="big">' + total + '</b> ' + (ok ? '≥' : '&lt;') + ' ' + T('DC') + ' ' + o.dc + ' → ' +
+        (ok ? '<b class="ok">' + T('RESISTED') + '</b>' : '<b class="fail">' + T('FAILED') + '</b>') + (o.dm ? ' · ' + T('takes {0}', '<b class="dmg">' + fin + '</b>') + ' ' + esc(D.t ? D.t(o.dtype || '') : '') : '') +
+        (before !== now ? ' <span class="hpchg">' + T('HP {0} → {1}', before, now) + '</span>' : '') + (notes.length ? ' <small>' + notes.join(' · ') + '</small>' : '') +
+        ' <small>(' + (by === 'player' ? T('rolled by the player') : T('no answer — the app rolled')) + ')</small>']);
+      shareTop(); U.saveCombat(); U.render();
+    };
+    pend[id] = { finish, timer: setTimeout(() => finish(null, 'auto'), 40000) };
+    sendTo(c.obr.pid, { type: 'saveReq', id, cid: c.id, hero: c.name, abil: o.abil, dc: o.dc, what: o.what, by: o.by, mode: o.smode || 'normal' });
+    return true;
+  };
+  U.canShield = c => {
+    try {
+      const d = E.compute(c); if (!d.casting.list.some(e => e.sp.n === 'Shield') || c.toggles['spell:Shield']) return false;
+      if (!d.resources.some(r => r.slot && E.left(c, r) > 0)) return false;
+      const e = ((S.combat && S.combat.list) || []).find(x => x.type === 'pc' && x.charId === c.id); return !(e && e.econ && e.econ.r);
+    } catch (e) { return false; }
+  };
+  U.askShield = function (tg, o) {
+    if (!U.DM || !OBR || !U.canShield(tg.pc)) return false;
+    const c = tg.pc; const id = E.uid();
+    const finish = (yes, by) => {
+      if (!pend[id]) return; clearTimeout(pend[id].timer); delete pend[id];
+      if (yes && U.canShield(c)) {
+        const w = U.spendFor(c, E.compute(c), { kind: 'spell', level: 1 }); c.toggles['spell:Shield'] = true;
+        const e = S.combat.list.find(x => x.type === 'pc' && x.charId === c.id); if (e) { e.econ = e.econ || U.econNew(); e.econ.r = 1; }
+        U.logAdd(c.name, ['🛡 <b>' + T('Shield!') + '</b> ' + T('AC {0} → {1}: the attack of {2} misses.', o.ac, o.ac + 5, esc(o.by)) + ' <small>(' + w + ')</small>']);
+        U.saveChars();
+      } else {
+        const before = tg.hpNow(); const notes = tg.damage(o.dm.total); if (o.cond) { tg.cond(o.cond, o.condRounds); notes.push(esc(D.t ? D.t(o.cond) : o.cond)); }
+        U.logAdd(o.by, ['💥 ' + esc(o.what || '') + ' → <b>' + esc(c.name) + '</b>: <b class="big dmg">' + o.dm.total + '</b> ' + (o.dtype || '') + ' <small>' + (o.dm.text || '') + '</small> <span class="hpchg">' + T('HP {0} → {1}', before, tg.hpNow()) + '</span>' +
+          (notes.length ? ' <small>' + notes.join(' · ') + '</small>' : '') + ' <small>(' + (by === 'player' ? T('no Shield') : T('no answer — no Shield')) + ')</small>']);
+      }
+      shareTop(); U.saveCombat(); U.render();
+    };
+    pend[id] = { finish, timer: setTimeout(() => finish(false, 'auto'), 20000) };
+    sendTo(c.obr.pid, { type: 'shieldReq', id, cid: c.id, hero: c.name, total: o.total, ac: o.ac, by: o.by, what: o.what });
+    return true;
+  };
+  function takeAnswers() {
+    const A = U.raw.get('obrAns', []); if (!A.length) return; U.raw.set('obrAns', []);
+    A.forEach(m => { const p = pend[m.id]; if (!p) return; if (m.type === 'saveRes') p.finish(Math.max(1, Math.min(20, Number(m.nat) || 1)), 'player'); else if (m.type === 'shieldRes') p.finish(!!m.yes, 'player'); });
+  }
+  // a monster the DM moves away from a hero → that hero's player is offered an opportunity attack (his reaction)
+  async function offerOA(it, prev, cur) {
+    const cb = S.combat; if (!U.DM || !cb || cb.turn < 0 || !U.strict()) return;
+    const l = linkOfIt(it); if (!l || l.k !== 'mon') return;
+    const mon = cb.list.find(x => x.id === l.eid) || cb.list.find(x => x.type === 'mon' && x.name === l.n); if (!mon || (mon.econ && mon.econ.disengage) || !(Number(mon.hp) > 0)) return;
+    try {
+      await gridInfo();
+      const b = await OBR.scene.items.getItemBounds([it.id]); const s1 = Math.max(1, Math.round(Math.max(b.width, b.height) / GRID.dpi));
+      const was = { x: b.center.x - (cur.x - prev.x), y: b.center.y - (cur.y - prev.y) };
+      const pcs = await OBR.scene.items.getItems(t => { const k = linkOfIt(t); return t.layer === 'CHARACTER' && !!k && k.k === 'pc'; });
+      for (const t of pcs) {
+        const c = U.byId(linkOfIt(t).cid); if (!c || !c.obr) continue;
+        const e = cb.list.find(x => x.type === 'pc' && x.charId === c.id); if (!e || (e.econ && e.econ.r) || E.compute(c).hpCur <= 0) continue;
+        const tb = await OBR.scene.items.getItemBounds([t.id]); const s2 = Math.max(1, Math.round(Math.max(tb.width, tb.height) / GRID.dpi));
+        const ftAt = async p => Math.max(1, Math.round((await OBR.scene.grid.getDistance(p, tb.center)) - (s1 - 1) / 2 - (s2 - 1) / 2)) * GRID.mult;
+        if ((await ftAt(was)) <= 5 && (await ftAt(b.center)) > 5) sendTo(c.obr.pid, { type: 'oaOffer', id: E.uid(), cid: c.id, hero: c.name, tid: mon.id, ttok: it.id, n: mon.name });
+      }
+    } catch (e) { console.warn('opportunity', e); }
+  }
+
+  // the DM clicked in his own token window on the map: the one who acts now (a monster or his own hero) does it to the clicked target
+  function dmAct(q) {
+    const cb = S.combat; if (!U.DM || !cb || cb.turn < 0) return '';
+    if (q.kind === 'next') { U.ACT.cbNext(); return ''; }
+    const active = cb.list[cb.turn]; if (!active) return '';
+    if (q.tid) cb.target[active.id] = q.tid;
+    S.mode = q.mode === 'adv' || q.mode === 'dis' ? q.mode : 'normal';
+    U.ACT.cbAct({ aid: q.aid }); S.mode = 'normal'; U.saveCombat(); U.render(); return '';
+  }
   let actBusy = false;
   async function runActQueue() {
     if (!U.DM || !U.game || actBusy) return;
     const Q = U.raw.get('obrActQ', []); if (!Q.length) return;
     U.raw.set('obrActQ', []); actBusy = true;
-    try { for (const q of Q.filter(x => x && Date.now() - (x.t || 0) < 5 * 60000)) { const err = await U.remoteAct(q); if (err) U.toast('⚠️ ' + err); } }
+    try { for (const q of Q.filter(x => x && Date.now() - (x.t || 0) < 5 * 60000)) { const err = q.dm ? dmAct(q) : await U.remoteAct(q); if (err) U.toast('⚠️ ' + err); } }
     finally { actBusy = false; }
     if (U.raw.get('obrActQ', []).length) runActQueue(); // more came while we were busy
   }
@@ -428,7 +543,8 @@
         if (it.layer !== 'CHARACTER') continue;
         const prev = posCache[it.id], cur = it.position; posCache[it.id] = cur;
         if (!prev || !cur || (prev.x === cur.x && prev.y === cur.y)) continue;
-        if (!it.lastModifiedUserId || it.lastModifiedUserId === me) continue; // the DM moved it: always fine
+        if (it.lastModifiedUserId === me) { offerOA(it, prev, cur); continue; } // the DM moved it: always fine (a monster walking away → opportunity attack offers)
+        if (!it.lastModifiedUserId) continue;
         const l = linkOfIt(it); const who = it.lastModifiedUserId;
         const back0 = async (msg, to) => { posCache[it.id] = prev; await OBR.scene.items.updateItems([it.id], L => { L.forEach(x => { x.position = prev; }); }); try { OBR.broadcast.sendMessage('dndtable/v1', { type: 'note', to, text: msg }); } catch (e) {} };
         // a player may move only the token of his own hero (strict rules)
@@ -511,7 +627,8 @@
         const txt = (f.desc || '') + ' ' + f.name;
         out.push({ id: 'u:f:' + f.id, n: f.name, k: 'feature', util: 1, cost: costOf(txt), tk: /another creature|a creature|an ally|ally|союзник|другое существо/i.test(f.desc || '') ? 'x' : 's', m: 1, rng: null, left: f.uses ? resLeft(f.id) : null, desc: short(f.desc), info: f.uses ? T('uses') : '' });
       });
-      return { cid: c.id, n: c.name || T('Unnamed'), speed: d.speed, rogue: c.classKey === 'rogue' && c.level >= 2, acts: out.slice(0, 90) };
+      const saves = {}; Object.keys(d.saves || {}).forEach(k => { saves[k] = d.saves[k].val; });
+      return { cid: c.id, n: c.name || T('Unnamed'), speed: d.speed, rogue: c.classKey === 'rogue' && c.level >= 2, saves, acts: out.slice(0, 90) };
     }).filter(Boolean);
   }
   U.obrActMenu = actMenu;
@@ -541,6 +658,7 @@
     if (rest === gk('chars')) { S.chars = U.store.get('chars', []).map(E.normalize); remember(); if (U.DM) queueState(); saveMenu(); redraw(); return; }
     if (rest === gk('combat') && U.DM) { S.combat = U.store.get('combat', S.combat); queueState(); redraw(); return; } // changed from a token card
     if (U.DM && rest === 'obrActQ') { runActQueue(); return; }
+    if (U.DM && rest === 'obrAns') { takeAnswers(); return; } // a player rolled his save / answered Shield
     if (rest === 'obrOpen') { // "📖 Open in the panel" on a token window
       const o = U.raw.get('obrOpen', null); if (!o || Date.now() - (o.t || 0) > 20000) return;
       if (o.k === 'hero' && U.byId(o.id)) { U.go('sheet', o.id); return; }
