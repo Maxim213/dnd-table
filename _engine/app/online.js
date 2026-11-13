@@ -90,7 +90,7 @@
       if (x.type === 'pc') {
         const c = U.byId(x.charId); if (!c) return { id: x.id, n: '?', k: 'pc' };
         let d = null; try { d = E.compute(c); } catch (e) {}
-        return { id: x.id, n: c.name || T('Unnamed'), k: 'pc', cid: c.id, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, init: x.init, cond: (c.conditions || []).slice(0, 6), pic: priv ? c.portraitThumb || '' : undefined };
+        return { id: x.id, n: c.name || T('Unnamed'), k: 'pc', cid: c.id, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, sp: d ? d.speed : 0, init: x.init, cond: (c.conditions || []).slice(0, 6), ec: x.econ || { a: 0, b: 0, r: 0 }, pic: priv ? c.portraitThumb || '' : undefined };
       }
       const m = { id: x.id, n: x.name, k: 'mon', st: health(Number(x.hp) || 0, Number(x.hpMax) || 0), init: x.init, cond: (x.conditions || []).slice(0, 6) };
       if (priv) Object.assign(m, { hp: Number(x.hp) || 0, mx: Number(x.hpMax) || 0, ac: x.ac, cr: x.cr || '' });
@@ -153,13 +153,31 @@
   // ---------- 3b. players act in the DM's fight: "who, with what, at whom" → the DM's app rolls and applies it ----------
   // A request: { id, cid (hero), aid (action id from E.compute(hero).actions), tid (fight entry id or '__all'), mode, from }.
   // Players send it through Owlbear; the DM's background page puts it into obrActQ; the DM's open panel resolves it here.
+  // rules checked here: only on your own turn (off-turn: reactions only — a weapon attack becomes ONE opportunity attack),
+  // each turn 1 action / 1 bonus action / 1 reaction, slots and uses (U.spendFor), "end my turn"
+  const refuse = (q, msg) => { U.logAdd(q.from || '?', ['⚠️ ' + msg]); if (S.log[0]) { S.log[0].share = 1; U.saveLog(); } U.render(); return ''; };
   U.remoteAct = function (q) {
     const cb = S.combat; if (!cb || cb.turn < 0) return T('No fight right now.');
     const ai = cb.list.findIndex(x => x.type === 'pc' && x.charId === q.cid); if (ai < 0) return T('{0} is not in the fight.', q.from || '?');
-    const actor = cb.list[ai]; const turn0 = cb.turn; const t0 = cb.target[actor.id]; const top = S.log[0];
+    const actor = cb.list[ai]; const own = cb.turn === ai;
+    if (q.kind === 'end') {
+      if (!own) return refuse(q, T('It is not your turn, so there is nothing to end.'));
+      U.logAdd(q.from || '?', ['⏭ ' + T('ends the turn.')]); if (S.log[0]) { S.log[0].share = 1; U.saveLog(); }
+      U.ACT.cbNext(); return '';
+    }
+    const c = U.byId(q.cid); let a = null; try { a = c && E.compute(c).actions.find(x => x.id === q.aid); } catch (e) {}
+    if (!a) return refuse(q, T('This action is not on the hero any more.'));
+    let cost = U.actCost(a), one = false;
+    if (!own) {
+      if (cost === 'r') { /* a reaction spell: fine */ } else if (a.kind === 'weapon') { cost = 'r'; one = true; } // opportunity attack
+      else return refuse(q, T('Not your turn: only a reaction now (an opportunity attack or a reaction spell like Shield).'));
+    }
+    const ec = actor.econ = actor.econ || U.econNew();
+    if (cost !== '-' && ec[cost] >= 1) return refuse(q, T('{0} is already used this turn.', T(U.ECON_NAME[cost])) + (cost === 'r' ? ' ' + T('It comes back at the start of your turn.') : ''));
+    const turn0 = cb.turn; const t0 = cb.target[actor.id]; const top = S.log[0];
     cb.turn = ai; if (q.tid) cb.target[actor.id] = q.tid; S.mode = q.mode === 'adv' || q.mode === 'dis' ? q.mode : 'normal';
     const toast0 = U.toast; let why = ''; U.toast = h => { why = h; }; // a refusal (no slots / uses) comes as a toast: catch it
-    try { U.ACT.cbAct({ aid: q.aid }); }
+    try { U.ACT.cbAct({ aid: q.aid, remote: 1, cost, one }); }
     finally { U.toast = toast0; cb.turn = turn0; if (t0 === undefined) delete cb.target[actor.id]; else cb.target[actor.id] = t0; S.mode = 'normal'; U.saveCombat(); }
     if (!S.log[0] || S.log[0] === top) U.logAdd(q.from || '?', ['⚠️ ' + (why || T('This action did not work.'))]); // tell everyone why nothing happened
     if (S.log[0] && S.log[0] !== top) { S.log[0].share = 1; S.log[0].html = '<small class="from">🦉 ' + esc(q.player || q.from || '') + '</small>' + S.log[0].html; U.saveLog(); }
@@ -178,7 +196,7 @@
     return (S.chars || []).map(c => {
       let d = null; try { d = E.compute(c); } catch (e) { return null; }
       const acts = d.actions.filter(a => a.kind !== 'item' || a.heal || a.temp).filter(a => a.hit != null || a.save || a.heal || a.temp || (a.dmg && a.extra)).slice(0, 24).map(a => ({
-        id: a.id, n: a.name, k: a.kind, heal: !!(a.heal || a.temp), area: !!(a.save && !a.hit),
+        id: a.id, n: a.name, k: a.kind, heal: !!(a.heal || a.temp), area: !!(a.save && a.hit == null), cost: U.actCost ? U.actCost(a) : 'a',
         info: (a.hit != null ? U.sign(a.hit) + ' ' : '') + (a.save ? T('DC') + ' ' + a.save.dc + ' ' + (D.AB[a.save.abil] || a.save.abil) + ' ' : '') + (a.dmg ? String(a.dmg).replace(/@(STR|DEX|CON|INT|WIS|CHA|LVL|PB)/gi, (m0, k) => { k = k.toUpperCase(); return k === 'LVL' ? d.x.lvl : k === 'PB' ? d.x.pb : d.x.mod[k]; }) : '') + (a.count > 1 ? ' ×' + a.count : '') + (a.level ? ' · ' + T('lvl {0}', a.level) : '')
       }));
       return { cid: c.id, n: c.name || T('Unnamed'), acts };
@@ -235,16 +253,24 @@
         return '<div class="obrrow pick' + (act ? ' act' : '') + (me ? ' me' : '') + (tg ? ' tgt' : '') + (x.k === 'mon' ? ' mon' : '') + '" data-act="obrTgt" data-id="' + esc(x.id || '') + '"><span class="ini">' + (x.init != null && x.init !== '' ? esc(x.init) : '–') + '</span><div class="who"><b>' + (act ? '▶ ' : '') + esc(x.n) + (me ? ' <span class="tag">' + T('you') + '</span>' : '') + (tg ? ' <span class="tag tgtag">🎯 ' + T('target') + '</span>' : '') + '</b>' + condTxt(x.cond) + bar + '</div></div>';
       }).join('') + '</div>';
       const a = st.list[st.turn]; const myTurn = !!(a && a.cid && mine.has(a.cid));
-      if (myTurn) h += '<p class="warn">⚔️ <b>' + T('Your turn!') + '</b> ' + T('Pick a target and an action below.') + '</p>';
       if (actor) {
         const menu = actMenu().find(m => m.cid === actor.id) || { acts: [] };
         const tgt = st.list.find(x => x.id === S.obrTgt);
-        h += '<div class="detail obract"><h3>🎯 ' + esc(actor.name) + (tgt ? ' → ' + esc(tgt.n) : '') + '</h3>' +
-          (!myTurn ? '<p class="hint">' + T('Not your turn: use this only for reactions (e.g. an opportunity attack) or when the DM says so.') + '</p>' : '') +
-          '<p class="hint">' + T('Advantage / Disadvantage: pick it in the dice panel first.') + (S.mode !== 'normal' ? ' <b>' + (S.mode === 'adv' ? T('Advantage') : T('Disadvantage')) + '</b>' : '') + '</p>' +
-          '<p><label class="inl"><input type="checkbox" data-on="obrAll"' + (S.obrAll ? ' checked' : '') + '> ' + T('All enemies at once (area spells: Fireball, Thunderwave…)') + '</label></p>' +
-          '<div class="actlist">' + menu.acts.map(x => '<button class="actb ' + esc(x.k) + '" data-act="obrDo" data-cid="' + esc(actor.id) + '" data-aid="' + esc(x.id) + '"><b>' + esc(x.n) + '</b><small>' + esc(x.info) + (x.heal ? ' · ❤️' : '') + '</small></button>').join('') + '</div>' +
-          '<p><button data-act="openSheet" data-id="' + esc(actor.id) + '">' + T('Open sheet →') + '</button></p></div>';
+        const ec = (meIn && meIn.ec) || { a: 0, b: 0, r: 0 };
+        const can = x => myTurn ? (x.cost === '-' || !ec[x.cost]) : ((x.cost === 'r' || x.k === 'weapon') && !ec.r);
+        const costTag = x => x.cost === '-' ? T('free (extra damage)') : !myTurn && x.k === 'weapon' ? '🛡 ' + T('opportunity attack (1 hit, your reaction)') : U.ECON_ICON[x.cost] + ' ' + T(U.ECON_NAME[x.cost]);
+        const mode = S.obrMode || 'normal';
+        h += '<div class="detail obract">' +
+          (myTurn ? '<p class="warn">⚔️ <b>' + T('Your turn!') + '</b> ' + T('1. Click the target in the list above. 2. Click what you do. 3. When you are done — End my turn.') + '</p>'
+            : '<p class="hint">⏳ ' + T('Not your turn. You can only react: hit an enemy that runs away from you (opportunity attack) or cast a reaction spell.') + '</p>') +
+          '<h3>' + esc(actor.name) + (tgt ? ' → 🎯 ' + esc(tgt.n) : '') + '</h3>' +
+          '<p>' + T('This turn:') + ' ' + U.econChips(ec) + ' <small>· ' + T('Speed {0} ft', (meIn && meIn.sp) || 30) + '</small></p>' +
+          '<p class="modepick">' + T('Roll:') + ' ' + [['normal', T('Normal')], ['adv', '⬆ ' + T('With advantage')], ['dis', '⬇ ' + T('With disadvantage')]].map(m => '<button class="mini' + (mode === m[0] ? ' on' : '') + '" data-act="obrMode" data-v="' + m[0] + '">' + m[1] + '</button>').join('') +
+          ' ' + U.ib('advantage') + '</p>' +
+          (menu.acts.some(x => x.area) ? '<p><label class="inl"><input type="checkbox" data-on="obrAll"' + (S.obrAll ? ' checked' : '') + '> 🌋 ' + T('Hit all enemies at once (only for area spells like Fireball)') + '</label></p>' : '') +
+          '<div class="actlist">' + menu.acts.map(x => '<button class="actb ' + esc(x.k) + '"' + (can(x) ? '' : ' disabled title="' + esc(T('Already used this turn')) + '"') + ' data-act="obrDo" data-cid="' + esc(actor.id) + '" data-aid="' + esc(x.id) + '"><b>' + esc(x.n) + '</b><small>' + esc(x.info) + (x.heal ? ' · ❤️' : '') + '</small><small class="cost">' + costTag(x) + '</small></button>').join('') + '</div>' +
+          '<p class="btnrow">' + (myTurn ? '<button class="primary" data-act="obrEnd" data-cid="' + esc(actor.id) + '">⏭ ' + T('End my turn') + '</button>' : '') +
+          '<button data-act="openSheet" data-id="' + esc(actor.id) + '">📜 ' + T('My character sheet') + '</button></p></div>';
       }
     }
     if (st && st.party && st.party.length) h += '<h3>' + T('The party') + '</h3><div class="obrlist">' + st.party.map(p => '<div class="obrrow' + (mine.has(p.id) ? ' me' : '') + '"><div class="who"><b>' + esc(p.n) + '</b> <small>' + T('lvl {0}', p.lvl) + '</small>' + condTxt(p.cond) + '<div class="hpbar"><i style="width:' + Math.max(0, Math.min(100, Math.round((p.hp / (p.mx || 1)) * 100))) + '%"></i></div><small>' + T('HP') + ' ' + p.hp + ' / ' + p.mx + ' · ' + T('AC') + ' ' + p.ac + '</small></div></div>').join('') + '</div>';
@@ -256,8 +282,10 @@
     const st = U.raw.get('obrstate', null); if (!st || !st.on) { U.toast(T('No fight right now.')); return; }
     const tid = S.obrAll ? '__all' : S.obrTgt;
     if (!tid) { U.toast(T('Click a row to choose the target.')); return; }
-    U.obrSendAct({ cid: ds.cid, aid: ds.aid, tid, mode: U.takeMode() }); U.renderSide();
+    U.obrSendAct({ cid: ds.cid, aid: ds.aid, tid, mode: S.obrMode || 'normal' }); S.obrMode = 'normal'; U.render();
   };
+  U.ACT.obrMode = ds => { S.obrMode = ds.v; U.render(); };
+  U.ACT.obrEnd = ds => { U.obrSendAct({ kind: 'end', cid: ds.cid }); };
   function markFightNav() {
     const b = document.querySelector('[data-v="obrfight"]'); if (!b) return;
     const st = U.raw.get('obrstate', null); const mine = new Set((S.chars || []).map(c => c.id));

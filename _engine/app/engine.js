@@ -513,7 +513,7 @@
       if (roll === 'SNEAK') roll = Math.ceil(d.lvl / 2) + 'd6';
       const isHeal = !!f.heal;
       const dmgLike = f.custom ? !!f.isDamage : !!f.dmgx;
-      acts.push(mk({ kind: 'feature', id: 'f:' + f.id, name: f.name, dmg: roll, heal: isHeal, extra: !isHeal && dmgLike, plain: !isHeal && !dmgLike, dtype: f.sneak ? T("(same as weapon)") : "",
+      acts.push(mk({ kind: 'feature', id: 'f:' + f.id, name: f.name, desc: f.desc || '', dmg: roll, heal: isHeal, extra: !isHeal && dmgLike, plain: !isHeal && !dmgLike, dtype: f.sneak ? T("(same as weapon)") : "",
         mult: isHeal ? 1 : E.effMult(d.L, 'all'), multSrc: isHeal ? '' : E.multSources(d.L, 'all'), res: f.uses ? f.id : null, ctx: true }));
     });
     // Consumables / items with rolls

@@ -148,7 +148,10 @@
     });
     return acts;
   }
+const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (players need them too)
+
   function startTurn(cb) {
+    cb.econ = U.econNew(); // a new turn: action, bonus action and reaction are back
     const v = cbView(cb); if (!v) return;
     const ended = U.tickConds(v.holder); const lines = [];
     if (ended.length) lines.push(T('no longer {0}', ended.map(x => esc(t(x))).join(', ')));
@@ -232,7 +235,8 @@
     }).join('') : '<div class="emptybig">' + T('<p>No one in the fight yet.</p><p>Add characters and monsters above, start a <b>📋 Prepared fight</b>, or click <b>Practice fight</b>.</p>') + '</div>') + '</div>';
 
     h += '<div class="cbactive">';
-    if (active) {
+    if (active && !cbView(active)) h += '<p class="warn">⚠️ ' + T('This hero is not in the game any more — remove the row or press Next turn.') + '</p>';
+    else if (active) {
       const v = cbView(active);
       const allT = list.filter(x => !isOut(x) || x.type === 'pc');
       let tgt = cb.target[active.id];
@@ -248,7 +252,7 @@
         (hasArea ? opt('__all', active.type === 'pc' ? T('⚡ All monsters (area — saves only)') : T('⚡ All characters (area — saves only)'), tgt) : '') +
         allT.filter(x => x.id !== active.id).map(x => { const tv = cbView(x); return opt(x.id, tv.name + ' (' + T('AC') + ' ' + tv.ac + ', ' + tv.hp + ' ' + T('HP') + ')', tgt); }).join('') + opt(active.id, T('Self'), tgt) + '</select></label>' +
         '<p class="hint">' + T('Each button shows the chance to hit (or that the target fails its save) and the average damage ≈.') + ' ' + ib('hitchance') + ' ' + ib('savechance') + '</p>';
-      h += '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + '"' + (a.blocked ? ' disabled' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
+      h += U.econChips(active.econ) + '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + '"' + (a.blocked ? ' disabled' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
         oddsLine(a, active, tcb, enemies, ctx) + '</small></button>').join('') + '</div>';
       if (active.type === 'mon') {
         if (active.multi) h += '<p class="hint">' + T('Multiattack: {0} attacks per turn.', active.multi) + '</p>';
@@ -418,7 +422,7 @@
     cbStart: () => {
       if (!S.combat.list.length) { U.toast(T('Add someone first.')); return; }
       if (S.combat.list.some(x => x.init == null || x.init === '')) U.ACT.cbRollInit();
-      sortCombat(); S.combat.round = 1; S.combat.turn = 0;
+      sortCombat(); S.combat.round = 1; S.combat.turn = 0; S.combat.list.forEach(x => { x.econ = U.econNew(); });
       while (S.combat.turn < S.combat.list.length - 1 && isOut(S.combat.list[S.combat.turn])) S.combat.turn++;
       U.saveCombat(); U.logAdd(T('Combat'), ['⚔️ ' + T('Round 1 begins. {0} goes first.', esc(cbView(S.combat.list[S.combat.turn]).name))]); U.render();
     },
@@ -446,14 +450,19 @@
         if (tid === '__all' || (a.area && !tcb)) { if (a.save) return enemies.map(U.cbTarget); return enemies[0] ? U.cbTarget(enemies[0]) : null; }
         return target;
       };
+      // turn economy: what this costs; the DM may still click it (only a warning), players' requests are checked before (online.js)
+      const econ = active.econ = active.econ || U.econNew();
+      const spend = a => { const k = ds.cost || U.actCost(a); if (k !== '-' && econ[k] >= 1 && !ds.remote) U.toast('⚠️ ' + T('Already used this turn: {0}. (You are the DM — it still works.)', T(ECON_NAME[k]))); if (k !== '-') econ[k] = (econ[k] || 0) + 1; };
       if (active.type === 'pc') {
-        const c = U.byId(active.charId); const d = E.compute(c); const a = d.actions.find(x => x.id === ds.aid); if (!a) return;
+        const c = U.byId(active.charId); const d = E.compute(c); let a = d.actions.find(x => x.id === ds.aid); if (!a) return;
+        if (ds.one) a = Object.assign({}, a, { count: 1 }); // a reaction attack (opportunity attack) is ONE attack
         const w = U.spendFor(c, d, a); who = c.name;
         if (/⚠️/.test(w)) { U.toast(w); return; }
+        spend(a); // only when it really happens (not when out of slots / uses)
         lines = ['<b>' + esc(a.name) + '</b>' + (w ? ' <small>(' + w + ')</small>' : '')].concat(U.resolve(a, U.attackerOf(c), pick(a)));
         U.saveChars();
       } else {
-        const a = monActions(active).find(x => x.id === ds.aid); if (!a || a.blocked) return; who = active.name;
+        const a = monActions(active).find(x => x.id === ds.aid); if (!a || a.blocked) return; who = active.name; spend(a);
         if (a.abId) {
           const ab = active.abilities.find(x => x.id === a.abId);
           active.used = active.used || {}; active.used[ab.id] = (active.used[ab.id] || 0) + 1;

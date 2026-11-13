@@ -538,6 +538,15 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 .music .moodgrid button.on { border-color: var(--gold); background: #3d3122; color: var(--gold2); }
 .music #tmYt { width: 100%; margin-bottom: 4px; }
 .music .ph { display: flex; justify-content: space-between; align-items: center; }
+.pickbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 12px 0 4px; padding: 12px 14px; border: 1px solid var(--gold); border-radius: 10px; background: rgba(217,164,65,.1); position: sticky; bottom: 8px; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.pickbar small { display: block; color: var(--dim); font-weight: normal; margin-top: 2px; }
+.pickbar .primary { font-size: 16px; padding: 8px 16px; }
+.econ { display: inline-flex; gap: 4px; flex-wrap: wrap; vertical-align: middle; margin: 2px 0 6px; }
+.econ .eck { font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid #5c8a4f; color: #b8f5b4; background: rgba(92,184,92,.12); }
+.econ .eck.used { border-color: #555; color: #888; background: transparent; text-decoration: line-through; }
+.actb small.cost { display: block; color: var(--gold); font-size: 11px; }
+.actb:disabled { opacity: .4; }
+.modepick .mini.on { border-color: var(--gold); background: #3d3122; color: var(--gold2); }
 
 </style>
 </head>
@@ -5599,6 +5608,33 @@ window.DND_RU.UI = {
   'Your turn!': 'Твой ход!',
   'Open your sheet to attack or cast.': 'Открой лист, чтобы атаковать или колдовать.',
   'The party': 'Отряд',
+  'Chosen:': 'Выбрано:',
+  'This hero is not in the game any more — remove the row or press Next turn.': 'Этого героя больше нет в игре — убери строку или нажми «Следующий ход».',
+  'Already used this turn: {0}. (You are the DM — it still works.)': 'Уже использовано в этом ходу: {0}. (Ты мастер — всё равно сработало.)',
+  'Used this turn': 'Уже потрачено в этом ходу',
+  'Still free this turn': 'Ещё есть в этом ходу',
+  'Bonus Action': 'Бонусное действие',
+  'Reaction': 'Реакция',
+  'It is not your turn, so there is nothing to end.': 'Сейчас не твой ход — нечего заканчивать.',
+  'ends the turn.': 'заканчивает ход.',
+  'This action is not on the hero any more.': 'Этого действия у героя больше нет.',
+  'Not your turn: only a reaction now (an opportunity attack or a reaction spell like Shield).': 'Сейчас не твой ход: можно только реакцию (провоцированную атаку или заклинание-реакцию, например Щит).',
+  '{0} is already used this turn.': 'Уже потрачено в этом ходу: {0}.',
+  'It comes back at the start of your turn.': 'Она вернётся в начале твоего хода.',
+  'free (extra damage)': 'бесплатно (доп. урон)',
+  'opportunity attack (1 hit, your reaction)': 'провоцированная атака (1 удар, твоя реакция)',
+  '1. Click the target in the list above. 2. Click what you do. 3. When you are done — End my turn.': '1. Нажми на цель в списке выше. 2. Нажми, что делаешь. 3. Когда закончил — «Закончить ход».',
+  'Not your turn. You can only react: hit an enemy that runs away from you (opportunity attack) or cast a reaction spell.': 'Сейчас не твой ход. Можно только среагировать: ударить врага, который убегает от тебя (провоцированная атака), или колдануть заклинание-реакцию.',
+  'This turn:': 'В этом ходу:',
+  'Speed {0} ft': 'Скорость {0} фт',
+  'Roll:': 'Бросок:',
+  'With advantage': 'С преимуществом',
+  'With disadvantage': 'С помехой',
+  'Hit all enemies at once (only for area spells like Fireball)': 'Задеть всех врагов сразу (только для заклинаний по области, например Огненный шар)',
+  'Already used this turn': 'Уже потрачено в этом ходу',
+  'End my turn': 'Закончить ход',
+  'My character sheet': 'Мой лист персонажа',
+  'More about it below ↓': 'Подробнее о выбранном — ниже ↓',
   'Time to save the game': 'Пора сохранить игру',
   '{0} min since the last save of “{1}”. Save the game to a file so nothing is lost if the browser data is cleared.': 'Прошло {0} мин с последнего сохранения игры «{1}». Сохрани её в файл, чтобы ничего не потерять, если данные браузера сотрутся.',
   'Save now': 'Сохранить сейчас',
@@ -6583,7 +6619,7 @@ window.SCN = (function () {
       if (roll === 'SNEAK') roll = Math.ceil(d.lvl / 2) + 'd6';
       const isHeal = !!f.heal;
       const dmgLike = f.custom ? !!f.isDamage : !!f.dmgx;
-      acts.push(mk({ kind: 'feature', id: 'f:' + f.id, name: f.name, dmg: roll, heal: isHeal, extra: !isHeal && dmgLike, plain: !isHeal && !dmgLike, dtype: f.sneak ? T("(same as weapon)") : "",
+      acts.push(mk({ kind: 'feature', id: 'f:' + f.id, name: f.name, desc: f.desc || '', dmg: roll, heal: isHeal, extra: !isHeal && dmgLike, plain: !isHeal && !dmgLike, dtype: f.sneak ? T("(same as weapon)") : "",
         mult: isHeal ? 1 : E.effMult(d.L, 'all'), multSrc: isHeal ? '' : E.multSources(d.L, 'all'), res: f.uses ? f.id : null, ctx: true }));
     });
     // Consumables / items with rolls
@@ -6811,6 +6847,21 @@ window.UI = (function () {
     const shown = r.rolls.slice(0, 8); const diceSum = r.rolls.reduce((a, x) => a + x.r, 0);
     return { dice: shown.map(x => x.r), faces: shown.map(x => x.f), used: diceSum, mode: 'normal', bonus: r.total - diceSum, total: r.total, more: r.rolls.length > 8 };
   };
+  // ---------- turn economy: each turn = 1 action, 1 bonus action, 1 reaction (the reaction comes back at the start of your turn) ----------
+  // what an action costs: 'a' action · 'b' bonus action · 'r' reaction · '-' free (extra damage riders like Sneak Attack, Divine Smite dice)
+  U.actCost = function (a) {
+    if (!a) return 'a';
+    if (a.extra) return '-';
+    if (a.kind === 'spell') { const sp = D.SPELLS.find(s => 'sp:' + s.n === a.id); const t0 = String((sp && sp.t) || ''); return /bonus|бонус/i.test(t0) ? 'b' : /reaction|реакц/i.test(t0) ? 'r' : 'a'; }
+    if (a.kind === 'item') return a.heal ? 'b' : 'a';
+    if (a.kind === 'feature') { const f = (a.desc || '') + ' ' + (a.name || ''); return /bonus action|бонусн/i.test(f) ? 'b' : /reaction|реакци/i.test(f) ? 'r' : 'a'; }
+    return 'a';
+  };
+  U.econNew = () => ({ a: 0, b: 0, r: 0 });
+  U.ECON_NAME = { a: 'Action', b: 'Bonus Action', r: 'Reaction' };
+  U.ECON_ICON = { a: '🗡', b: '⚡', r: '🛡' };
+  // chips: what is still free this turn
+  U.econChips = ec => '<span class="econ">' + ['a', 'b', 'r'].map(k => '<span class="eck' + (ec && ec[k] ? ' used' : '') + '" title="' + esc(T(ec && ec[k] ? 'Used this turn' : 'Still free this turn')) + '">' + U.ECON_ICON[k] + ' ' + T(U.ECON_NAME[k]) + '</span>').join('') + '</span>';
   U.takeMode = () => { const m = S.mode; S.mode = 'normal'; return m; };
   U.opt = (v, label, sel) => '<option value="' + esc(v) + '"' + (String(v) === String(sel) ? ' selected' : '') + '>' + esc(label) + '</option>';
   U.pill = (on, act, data, title, sub, dis) =>
@@ -7276,6 +7327,17 @@ window.UI = (function () {
   };
 
   const armorTxt = C => (C.armor.length ? C.armor.map(x => t(x)).join(', ') : T('none'));
+  // right under the cards: what you picked + a big "Next" button (the long details come after it)
+  function nextBar(c, kind) {
+    const X = kind === 'class' ? D.CLASSES[c.classKey] : kind === 'species' ? D.SPECIES[c.speciesKey] : D.BACKGROUNDS[c.backgroundKey];
+    if (!X) return '';
+    const st = U.builderSteps(c); const nx = st[S.step + 1];
+    return '<div class="pickbar" id="pickbar"><div><b>✅ ' + T('Chosen:') + ' ' + (X.icon ? X.icon + ' ' : '') + esc(X.name) + '</b><small>' + esc(X.blurb || '') + '</small></div>' +
+      (nx ? '<button class="primary" data-act="step" data-i="' + (S.step + 1) + '">' + T('Next: {0} →', nx.t) + '</button>' : '') + '</div>' +
+      '<p class="hint">' + T('More about it below ↓') + '</p>';
+  }
+  U.toPickbar = () => setTimeout(() => { const b = document.getElementById('pickbar'); if (b) b.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 30);
+
   function bClass(c) {
     const cards = Object.keys(D.CLASSES).map(k => {
       const C = D.CLASSES[k];
@@ -7312,7 +7374,7 @@ window.UI = (function () {
         '<div class="lvlgrid">' + feats + '</div>' +
         (road ? '<h4>' + T('Levels 4–20 (hover a name to read it)') + ' ' + ib('later') + '</h4><ul class="roadmap">' + road + '</ul>' : '') + '</div>';
     }
-    return '<h2>' + T('1. Choose a class') + ' ' + ib('class') + '</h2><p class="lead">' + T('Your class is what you <b>do</b> in the group: fight, sneak, heal or cast spells. First game? Pick an <span class="diff easy">Easy</span> one.') + '</p><div class="cards">' + cards + '</div>' + det;
+    return '<h2>' + T('1. Choose a class') + ' ' + ib('class') + '</h2><p class="lead">' + T('Your class is what you <b>do</b> in the group: fight, sneak, heal or cast spells. First game? Pick an <span class="diff easy">Easy</span> one.') + '</p><div class="cards">' + cards + '</div>' + nextBar(c, 'class') + det;
   }
 
   function bSpecies(c) {
@@ -7338,7 +7400,7 @@ window.UI = (function () {
       const ab = hasCantrip ? '<h4>' + T('Which ability powers your species magic?') + '</h4><p class="hint">' + T('Pick the same one your class uses for magic, or your highest of these three.') + '</p><div class="opts">' + ['INT', 'WIS', 'CHA'].map(a => pill((c.opts.speciesAbility || '') === a, 'setOpt', 'data-k="speciesAbility" data-v="' + a + '"', AN(a), '')).join('') + '</div>' : '';
       det = '<div class="detail"><h3>' + Sp.icon + ' ' + Sp.name + '</h3><ul>' + Sp.traits.map(x => '<li><b>' + esc(x.name) + '</b> — ' + esc(x.desc) + '</li>').join('') + '</ul>' + opts + feat + ab + '</div>';
     }
-    return '<h2>' + T('2. Choose a species') + ' ' + ib('species') + '</h2><p class="lead">' + T('What kind of person are you? It gives small special traits. Pick the one you like the look and feel of — there is no wrong choice.') + '</p><div class="cards">' + cards + '</div>' + det;
+    return '<h2>' + T('2. Choose a species') + ' ' + ib('species') + '</h2><p class="lead">' + T('What kind of person are you? It gives small special traits. Pick the one you like the look and feel of — there is no wrong choice.') + '</p><div class="cards">' + cards + '</div>' + nextBar(c, 'species') + det;
   }
 
   function bBackground(c) {
@@ -7361,7 +7423,7 @@ window.UI = (function () {
       det = '<div class="detail"><h3>' + B.name + '</h3><p><b>' + T('Skills you get:') + '</b> ' + B.skills.map(t).join(', ') + ' ' + ib('skills') + '</p><p><b>' + T('Origin feat:') + '</b> ' + D.FEATS[fk].name + ' ' + ib(fk === 'magicinitiate' ? 'magicinitiate' : 'feat') + ' — ' + esc(D.FEATS[fk].desc) + '</p>' +
         '<h4>' + T('Raise your abilities') + ' ' + ib('bgbonus') + '</h4><div class="opts">' + modeBtns + '</div>' + pick + '</div>';
     }
-    return '<h2>' + T('3. Choose a background') + ' ' + ib('background') + '</h2><p class="lead">' + T('What did you do before adventuring? It raises your ability scores, gives <b>2 skills</b> and a small special talent (<b>feat</b>).') + '</p><div class="cards">' + cards + '</div>' + det;
+    return '<h2>' + T('3. Choose a background') + ' ' + ib('background') + '</h2><p class="lead">' + T('What did you do before adventuring? It raises your ability scores, gives <b>2 skills</b> and a small special talent (<b>feat</b>).') + '</p><div class="cards">' + cards + '</div>' + nextBar(c, 'background') + det;
   }
 
   function bgBonusOf(c, a) {
@@ -7642,11 +7704,11 @@ window.UI = (function () {
       ['fightingStyle', 'order', 'subclass'].forEach(k => delete c.opts[k]);
       c.inventory = []; delete c.kit; c.gold = 0;
       const B = D.BACKGROUNDS[c.backgroundKey]; if (B) defaultBgPlus(c, B);
-      U.commit();
+      U.commit(); U.toPickbar();
     },
-    setSpecies: ds => { const c = U.cur(); if (c.speciesKey === ds.k) return; c.speciesKey = ds.k; c.speciesOpt = ''; delete c.picks.species; if (ds.k !== 'human') delete c.opts.humanFeat; c.inspiration = ds.k === 'human'; U.commit(); },
+    setSpecies: ds => { const c = U.cur(); if (c.speciesKey === ds.k) return; c.speciesKey = ds.k; c.speciesOpt = ''; delete c.picks.species; if (ds.k !== 'human') delete c.opts.humanFeat; c.inspiration = ds.k === 'human'; U.commit(); U.toPickbar(); },
     setSpOpt: ds => { U.cur().speciesOpt = ds.k; U.commit(); },
-    setBg: ds => { const c = U.cur(); c.backgroundKey = ds.k; defaultBgPlus(c, D.BACKGROUNDS[ds.k]); Object.keys(c.picks).filter(k => k.indexOf('skilled') === 0).forEach(k => delete c.picks[k]); delete c.picks.miCantrips; delete c.picks.miSpell; U.commit(); },
+    setBg: ds => { const c = U.cur(); c.backgroundKey = ds.k; defaultBgPlus(c, D.BACKGROUNDS[ds.k]); Object.keys(c.picks).filter(k => k.indexOf('skilled') === 0).forEach(k => delete c.picks[k]); delete c.picks.miCantrips; delete c.picks.miSpell; U.commit(); U.toPickbar(); },
     setBgMode: ds => { U.cur().bgMode = ds.v; U.commit(); },
     setBgPlus: ds => {
       const c = U.cur();
@@ -8310,7 +8372,10 @@ window.UI = (function () {
     });
     return acts;
   }
+const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (players need them too)
+
   function startTurn(cb) {
+    cb.econ = U.econNew(); // a new turn: action, bonus action and reaction are back
     const v = cbView(cb); if (!v) return;
     const ended = U.tickConds(v.holder); const lines = [];
     if (ended.length) lines.push(T('no longer {0}', ended.map(x => esc(t(x))).join(', ')));
@@ -8394,7 +8459,8 @@ window.UI = (function () {
     }).join('') : '<div class="emptybig">' + T('<p>No one in the fight yet.</p><p>Add characters and monsters above, start a <b>📋 Prepared fight</b>, or click <b>Practice fight</b>.</p>') + '</div>') + '</div>';
 
     h += '<div class="cbactive">';
-    if (active) {
+    if (active && !cbView(active)) h += '<p class="warn">⚠️ ' + T('This hero is not in the game any more — remove the row or press Next turn.') + '</p>';
+    else if (active) {
       const v = cbView(active);
       const allT = list.filter(x => !isOut(x) || x.type === 'pc');
       let tgt = cb.target[active.id];
@@ -8410,7 +8476,7 @@ window.UI = (function () {
         (hasArea ? opt('__all', active.type === 'pc' ? T('⚡ All monsters (area — saves only)') : T('⚡ All characters (area — saves only)'), tgt) : '') +
         allT.filter(x => x.id !== active.id).map(x => { const tv = cbView(x); return opt(x.id, tv.name + ' (' + T('AC') + ' ' + tv.ac + ', ' + tv.hp + ' ' + T('HP') + ')', tgt); }).join('') + opt(active.id, T('Self'), tgt) + '</select></label>' +
         '<p class="hint">' + T('Each button shows the chance to hit (or that the target fails its save) and the average damage ≈.') + ' ' + ib('hitchance') + ' ' + ib('savechance') + '</p>';
-      h += '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + '"' + (a.blocked ? ' disabled' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
+      h += U.econChips(active.econ) + '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + '"' + (a.blocked ? ' disabled' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
         oddsLine(a, active, tcb, enemies, ctx) + '</small></button>').join('') + '</div>';
       if (active.type === 'mon') {
         if (active.multi) h += '<p class="hint">' + T('Multiattack: {0} attacks per turn.', active.multi) + '</p>';
@@ -8580,7 +8646,7 @@ window.UI = (function () {
     cbStart: () => {
       if (!S.combat.list.length) { U.toast(T('Add someone first.')); return; }
       if (S.combat.list.some(x => x.init == null || x.init === '')) U.ACT.cbRollInit();
-      sortCombat(); S.combat.round = 1; S.combat.turn = 0;
+      sortCombat(); S.combat.round = 1; S.combat.turn = 0; S.combat.list.forEach(x => { x.econ = U.econNew(); });
       while (S.combat.turn < S.combat.list.length - 1 && isOut(S.combat.list[S.combat.turn])) S.combat.turn++;
       U.saveCombat(); U.logAdd(T('Combat'), ['⚔️ ' + T('Round 1 begins. {0} goes first.', esc(cbView(S.combat.list[S.combat.turn]).name))]); U.render();
     },
@@ -8608,14 +8674,19 @@ window.UI = (function () {
         if (tid === '__all' || (a.area && !tcb)) { if (a.save) return enemies.map(U.cbTarget); return enemies[0] ? U.cbTarget(enemies[0]) : null; }
         return target;
       };
+      // turn economy: what this costs; the DM may still click it (only a warning), players' requests are checked before (online.js)
+      const econ = active.econ = active.econ || U.econNew();
+      const spend = a => { const k = ds.cost || U.actCost(a); if (k !== '-' && econ[k] >= 1 && !ds.remote) U.toast('⚠️ ' + T('Already used this turn: {0}. (You are the DM — it still works.)', T(ECON_NAME[k]))); if (k !== '-') econ[k] = (econ[k] || 0) + 1; };
       if (active.type === 'pc') {
-        const c = U.byId(active.charId); const d = E.compute(c); const a = d.actions.find(x => x.id === ds.aid); if (!a) return;
+        const c = U.byId(active.charId); const d = E.compute(c); let a = d.actions.find(x => x.id === ds.aid); if (!a) return;
+        if (ds.one) a = Object.assign({}, a, { count: 1 }); // a reaction attack (opportunity attack) is ONE attack
         const w = U.spendFor(c, d, a); who = c.name;
         if (/⚠️/.test(w)) { U.toast(w); return; }
+        spend(a); // only when it really happens (not when out of slots / uses)
         lines = ['<b>' + esc(a.name) + '</b>' + (w ? ' <small>(' + w + ')</small>' : '')].concat(U.resolve(a, U.attackerOf(c), pick(a)));
         U.saveChars();
       } else {
-        const a = monActions(active).find(x => x.id === ds.aid); if (!a || a.blocked) return; who = active.name;
+        const a = monActions(active).find(x => x.id === ds.aid); if (!a || a.blocked) return; who = active.name; spend(a);
         if (a.abId) {
           const ab = active.abilities.find(x => x.id === a.abId);
           active.used = active.used || {}; active.used[ab.id] = (active.used[ab.id] || 0) + 1;

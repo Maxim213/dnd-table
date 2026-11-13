@@ -166,6 +166,21 @@ window.UI = (function () {
     const shown = r.rolls.slice(0, 8); const diceSum = r.rolls.reduce((a, x) => a + x.r, 0);
     return { dice: shown.map(x => x.r), faces: shown.map(x => x.f), used: diceSum, mode: 'normal', bonus: r.total - diceSum, total: r.total, more: r.rolls.length > 8 };
   };
+  // ---------- turn economy: each turn = 1 action, 1 bonus action, 1 reaction (the reaction comes back at the start of your turn) ----------
+  // what an action costs: 'a' action · 'b' bonus action · 'r' reaction · '-' free (extra damage riders like Sneak Attack, Divine Smite dice)
+  U.actCost = function (a) {
+    if (!a) return 'a';
+    if (a.extra) return '-';
+    if (a.kind === 'spell') { const sp = D.SPELLS.find(s => 'sp:' + s.n === a.id); const t0 = String((sp && sp.t) || ''); return /bonus|бонус/i.test(t0) ? 'b' : /reaction|реакц/i.test(t0) ? 'r' : 'a'; }
+    if (a.kind === 'item') return a.heal ? 'b' : 'a';
+    if (a.kind === 'feature') { const f = (a.desc || '') + ' ' + (a.name || ''); return /bonus action|бонусн/i.test(f) ? 'b' : /reaction|реакци/i.test(f) ? 'r' : 'a'; }
+    return 'a';
+  };
+  U.econNew = () => ({ a: 0, b: 0, r: 0 });
+  U.ECON_NAME = { a: 'Action', b: 'Bonus Action', r: 'Reaction' };
+  U.ECON_ICON = { a: '🗡', b: '⚡', r: '🛡' };
+  // chips: what is still free this turn
+  U.econChips = ec => '<span class="econ">' + ['a', 'b', 'r'].map(k => '<span class="eck' + (ec && ec[k] ? ' used' : '') + '" title="' + esc(T(ec && ec[k] ? 'Used this turn' : 'Still free this turn')) + '">' + U.ECON_ICON[k] + ' ' + T(U.ECON_NAME[k]) + '</span>').join('') + '</span>';
   U.takeMode = () => { const m = S.mode; S.mode = 'normal'; return m; };
   U.opt = (v, label, sel) => '<option value="' + esc(v) + '"' + (String(v) === String(sel) ? ' selected' : '') + '>' + esc(label) + '</option>';
   U.pill = (on, act, data, title, sub, dis) =>

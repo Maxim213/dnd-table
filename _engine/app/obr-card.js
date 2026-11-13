@@ -86,9 +86,13 @@ export function startCard(OBR) {
       else if (!actor) out += '<p class="tc-msg">' + tr('Your hero is not in this fight.', 'Твоего героя нет в этом бою.') + '</p>';
       else {
         const myTurn = f.list[f.turn] && f.list[f.turn].cid === actor.cid;
-        out += '<h4>⚔️ ' + esc(actor.n) + ' → ' + esc(e.n) + (myTurn ? '' : ' <small>(' + tr('not your turn', 'не твой ход') + ')</small>') + '</h4>' +
-          '<div class="tc-row tc-mode">' + [['normal', tr('Normal', 'Обычно')], ['adv', tr('Advantage', 'Преимущество')], ['dis', tr('Disadvantage', 'Помеха')]].map(m => '<button data-mode="' + m[0] + '" class="' + (mode === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>' +
-          '<div class="tc-acts">' + actor.acts.filter(a => !a.heal).map(a => '<button data-act="' + esc(a.id) + '" data-cid="' + esc(actor.cid) + '"><b>' + esc(a.n) + '</b><small>' + esc(a.info) + '</small></button>').join('') + '</div>';
+        const ec = meIn.ec || { a: 0, b: 0, r: 0 };
+        const can = a => myTurn ? (a.cost === '-' || !ec[a.cost]) : ((a.cost === 'r' || a.k === 'weapon') && !ec.r);
+        const CN = { a: tr('Action', 'Действие'), b: tr('Bonus', 'Бонусное'), r: tr('Reaction', 'Реакция'), '-': tr('free', 'бесплатно') };
+        const costTxt = a => !myTurn && a.k === 'weapon' ? '🛡 ' + tr('opportunity attack', 'провоцированная атака') : ({ a: '🗡', b: '⚡', r: '🛡', '-': '' }[a.cost] || '') + ' ' + (CN[a.cost] || '');
+        out += '<h4>⚔️ ' + esc(actor.n) + ' → ' + esc(e.n) + (myTurn ? '' : ' <small>(' + tr('not your turn: reactions only', 'не твой ход: только реакция') + ')</small>') + '</h4>' +
+          '<div class="tc-row tc-mode">' + [['normal', tr('Normal', 'Обычно')], ['adv', '⬆ ' + tr('Advantage', 'Преимущество')], ['dis', '⬇ ' + tr('Disadvantage', 'Помеха')]].map(m => '<button data-mode="' + m[0] + '" class="' + (mode === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>' +
+          '<div class="tc-acts">' + actor.acts.filter(a => !a.heal).map(a => '<button data-act="' + esc(a.id) + '" data-cid="' + esc(actor.cid) + '"' + (can(a) ? '' : ' disabled') + '><b>' + esc(a.n) + '</b><small>' + esc(a.info) + ' · ' + costTxt(a) + '</small></button>').join('') + '</div>';
       }
       return out;
     }

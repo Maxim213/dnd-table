@@ -105,6 +105,17 @@
   };
 
   const armorTxt = C => (C.armor.length ? C.armor.map(x => t(x)).join(', ') : T('none'));
+  // right under the cards: what you picked + a big "Next" button (the long details come after it)
+  function nextBar(c, kind) {
+    const X = kind === 'class' ? D.CLASSES[c.classKey] : kind === 'species' ? D.SPECIES[c.speciesKey] : D.BACKGROUNDS[c.backgroundKey];
+    if (!X) return '';
+    const st = U.builderSteps(c); const nx = st[S.step + 1];
+    return '<div class="pickbar" id="pickbar"><div><b>✅ ' + T('Chosen:') + ' ' + (X.icon ? X.icon + ' ' : '') + esc(X.name) + '</b><small>' + esc(X.blurb || '') + '</small></div>' +
+      (nx ? '<button class="primary" data-act="step" data-i="' + (S.step + 1) + '">' + T('Next: {0} →', nx.t) + '</button>' : '') + '</div>' +
+      '<p class="hint">' + T('More about it below ↓') + '</p>';
+  }
+  U.toPickbar = () => setTimeout(() => { const b = document.getElementById('pickbar'); if (b) b.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 30);
+
   function bClass(c) {
     const cards = Object.keys(D.CLASSES).map(k => {
       const C = D.CLASSES[k];
@@ -141,7 +152,7 @@
         '<div class="lvlgrid">' + feats + '</div>' +
         (road ? '<h4>' + T('Levels 4–20 (hover a name to read it)') + ' ' + ib('later') + '</h4><ul class="roadmap">' + road + '</ul>' : '') + '</div>';
     }
-    return '<h2>' + T('1. Choose a class') + ' ' + ib('class') + '</h2><p class="lead">' + T('Your class is what you <b>do</b> in the group: fight, sneak, heal or cast spells. First game? Pick an <span class="diff easy">Easy</span> one.') + '</p><div class="cards">' + cards + '</div>' + det;
+    return '<h2>' + T('1. Choose a class') + ' ' + ib('class') + '</h2><p class="lead">' + T('Your class is what you <b>do</b> in the group: fight, sneak, heal or cast spells. First game? Pick an <span class="diff easy">Easy</span> one.') + '</p><div class="cards">' + cards + '</div>' + nextBar(c, 'class') + det;
   }
 
   function bSpecies(c) {
@@ -167,7 +178,7 @@
       const ab = hasCantrip ? '<h4>' + T('Which ability powers your species magic?') + '</h4><p class="hint">' + T('Pick the same one your class uses for magic, or your highest of these three.') + '</p><div class="opts">' + ['INT', 'WIS', 'CHA'].map(a => pill((c.opts.speciesAbility || '') === a, 'setOpt', 'data-k="speciesAbility" data-v="' + a + '"', AN(a), '')).join('') + '</div>' : '';
       det = '<div class="detail"><h3>' + Sp.icon + ' ' + Sp.name + '</h3><ul>' + Sp.traits.map(x => '<li><b>' + esc(x.name) + '</b> — ' + esc(x.desc) + '</li>').join('') + '</ul>' + opts + feat + ab + '</div>';
     }
-    return '<h2>' + T('2. Choose a species') + ' ' + ib('species') + '</h2><p class="lead">' + T('What kind of person are you? It gives small special traits. Pick the one you like the look and feel of — there is no wrong choice.') + '</p><div class="cards">' + cards + '</div>' + det;
+    return '<h2>' + T('2. Choose a species') + ' ' + ib('species') + '</h2><p class="lead">' + T('What kind of person are you? It gives small special traits. Pick the one you like the look and feel of — there is no wrong choice.') + '</p><div class="cards">' + cards + '</div>' + nextBar(c, 'species') + det;
   }
 
   function bBackground(c) {
@@ -190,7 +201,7 @@
       det = '<div class="detail"><h3>' + B.name + '</h3><p><b>' + T('Skills you get:') + '</b> ' + B.skills.map(t).join(', ') + ' ' + ib('skills') + '</p><p><b>' + T('Origin feat:') + '</b> ' + D.FEATS[fk].name + ' ' + ib(fk === 'magicinitiate' ? 'magicinitiate' : 'feat') + ' — ' + esc(D.FEATS[fk].desc) + '</p>' +
         '<h4>' + T('Raise your abilities') + ' ' + ib('bgbonus') + '</h4><div class="opts">' + modeBtns + '</div>' + pick + '</div>';
     }
-    return '<h2>' + T('3. Choose a background') + ' ' + ib('background') + '</h2><p class="lead">' + T('What did you do before adventuring? It raises your ability scores, gives <b>2 skills</b> and a small special talent (<b>feat</b>).') + '</p><div class="cards">' + cards + '</div>' + det;
+    return '<h2>' + T('3. Choose a background') + ' ' + ib('background') + '</h2><p class="lead">' + T('What did you do before adventuring? It raises your ability scores, gives <b>2 skills</b> and a small special talent (<b>feat</b>).') + '</p><div class="cards">' + cards + '</div>' + nextBar(c, 'background') + det;
   }
 
   function bgBonusOf(c, a) {
@@ -471,11 +482,11 @@
       ['fightingStyle', 'order', 'subclass'].forEach(k => delete c.opts[k]);
       c.inventory = []; delete c.kit; c.gold = 0;
       const B = D.BACKGROUNDS[c.backgroundKey]; if (B) defaultBgPlus(c, B);
-      U.commit();
+      U.commit(); U.toPickbar();
     },
-    setSpecies: ds => { const c = U.cur(); if (c.speciesKey === ds.k) return; c.speciesKey = ds.k; c.speciesOpt = ''; delete c.picks.species; if (ds.k !== 'human') delete c.opts.humanFeat; c.inspiration = ds.k === 'human'; U.commit(); },
+    setSpecies: ds => { const c = U.cur(); if (c.speciesKey === ds.k) return; c.speciesKey = ds.k; c.speciesOpt = ''; delete c.picks.species; if (ds.k !== 'human') delete c.opts.humanFeat; c.inspiration = ds.k === 'human'; U.commit(); U.toPickbar(); },
     setSpOpt: ds => { U.cur().speciesOpt = ds.k; U.commit(); },
-    setBg: ds => { const c = U.cur(); c.backgroundKey = ds.k; defaultBgPlus(c, D.BACKGROUNDS[ds.k]); Object.keys(c.picks).filter(k => k.indexOf('skilled') === 0).forEach(k => delete c.picks[k]); delete c.picks.miCantrips; delete c.picks.miSpell; U.commit(); },
+    setBg: ds => { const c = U.cur(); c.backgroundKey = ds.k; defaultBgPlus(c, D.BACKGROUNDS[ds.k]); Object.keys(c.picks).filter(k => k.indexOf('skilled') === 0).forEach(k => delete c.picks[k]); delete c.picks.miCantrips; delete c.picks.miSpell; U.commit(); U.toPickbar(); },
     setBgMode: ds => { U.cur().bgMode = ds.v; U.commit(); },
     setBgPlus: ds => {
       const c = U.cur();

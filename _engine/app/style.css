@@ -531,3 +531,12 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 .music .moodgrid button.on { border-color: var(--gold); background: #3d3122; color: var(--gold2); }
 .music #tmYt { width: 100%; margin-bottom: 4px; }
 .music .ph { display: flex; justify-content: space-between; align-items: center; }
+.pickbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 12px 0 4px; padding: 12px 14px; border: 1px solid var(--gold); border-radius: 10px; background: rgba(217,164,65,.1); position: sticky; bottom: 8px; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+.pickbar small { display: block; color: var(--dim); font-weight: normal; margin-top: 2px; }
+.pickbar .primary { font-size: 16px; padding: 8px 16px; }
+.econ { display: inline-flex; gap: 4px; flex-wrap: wrap; vertical-align: middle; margin: 2px 0 6px; }
+.econ .eck { font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid #5c8a4f; color: #b8f5b4; background: rgba(92,184,92,.12); }
+.econ .eck.used { border-color: #555; color: #888; background: transparent; text-decoration: line-through; }
+.actb small.cost { display: block; color: var(--gold); font-size: 11px; }
+.actb:disabled { opacity: .4; }
+.modepick .mini.on { border-color: var(--gold); background: #3d3122; color: var(--gold2); }

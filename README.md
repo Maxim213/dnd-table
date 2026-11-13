@@ -83,6 +83,8 @@ No multiclassing and no live sync yet (files go through Discord). Levels 4–20:
 - Local test without Owlbear: `_dev/sim.html` (DM + one player in one page, fake SDK in `_dev/fakeobr.js`; `_dev/` is not published).
 
 ### Players act in the fight, token cards, table music (stage 4–5)
+- **Turn rules:** every turn = 🗡 1 Action, ⚡ 1 Bonus Action, 🛡 1 Reaction (it comes back at the start of your turn). Players can act only on their turn; off-turn only a reaction: a weapon hit becomes ONE opportunity attack, or a reaction spell. Spam is refused with a message in the log. ⏭ End my turn passes the turn. The DM sees the same chips and may still click anything (a warning only).
+- **Builder:** after picking a class / species / background, a bar "✅ Chosen … Next →" sits right under the cards.
 - **Player acts:** in **⚔️ Fight** a player clicks a row to choose the target (🎯), then one of the hero's actions (attacks, spells, features). The request goes to the DM's app, which rolls, compares with AC, applies damage and spends slots — the result goes to everyone, even when the DM hides his own rolls. "All enemies at once" for area spells. Advantage / Disadvantage: pick it in the dice panel first.
   Requests that arrive while the DM's panel is closed wait in a queue (`obrActQ`) and the DM gets a notification.
 - **Token cards** (`card.html`, `_engine/app/obr-card.js`): select one token in Owlbear → the D&D Table card shows in its menu.
