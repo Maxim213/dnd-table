@@ -22,7 +22,16 @@
   .tc-link button { display: block; width: 100%; text-align: left; margin: 3px 0; padding: 4px 8px; }
   .tc-msg { color: var(--dim); padding: 6px 0; }
   .tc-mode button.on { border-color: var(--gold); color: var(--gold2); background: #3d3122; }
-  h4 { margin: 8px 0 2px; font-size: 13px; }
+  h4 { margin: 8px 0 2px; font-size: 13px; color: var(--gold2); }
+  .tc-head { position: relative; }
+  .tc-x { position: absolute; right: 0; top: 0; padding: 2px 8px; }
+  .tc-turn { margin: 6px 0 2px; padding: 4px 6px; background: #241c14; border-radius: 6px; font-size: 12px; }
+  .tc-ec { display: inline-block; margin: 0 1px; } .tc-ec.used { opacity: .3; filter: grayscale(1); }
+  .tc-acts button { flex: 1 1 46%; min-width: 140px; }
+  .tc-acts button:disabled { opacity: .55; }
+  .tc-no { color: #e07a6a !important; } .tc-warn { color: #e0b96a !important; } .tc-hint { color: var(--dim); font-size: 12px; margin: 4px 0; }
+  .tc-pick { display: block; padding: 3px 4px; border-bottom: 1px solid #2a2118; cursor: pointer; } .tc-pick.ally { color: #f0c27a; } .tc-pick.far { opacity: .6; }
+  .tc-row button.primary { border-color: var(--gold); color: var(--gold2); }
 </style>
 </head>
 <body>
@@ -33,9 +42,9 @@
   const SDK = 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
   (async () => {
     try {
-      const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr'), q.get('sel')) : (await import(SDK)).default;
+      const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr'), q.get('sel')) : await import(SDK).then(m => { window.OBR_SDK = m; return m.default; });
       const { startCard } = await import('./_engine/app/obr-card.js');
-      startCard(OBR);
+      startCard(OBR, { pop: !!q.get('pop') });
     } catch (e) { document.getElementById('card').innerHTML = '<p class="tc-msg">⚠️ ' + String(e.message || e).replace(/</g, '&lt;') + '</p>'; }
   })();
 </script>

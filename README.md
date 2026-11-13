@@ -97,3 +97,13 @@ No multiclassing and no live sync yet (files go through Discord). Levels 4–20:
   Melee reach 5 ft (Reach weapons 10 ft) — too far is refused. Ranged: beyond normal range = Disadvantage, beyond long range = refused, an enemy right next to you = Disadvantage. Spells: their range in feet (Touch = 5 ft). The log shows "📏 N ft".
   In a fight a player's hero token moves only on its own turn and not farther than its speed per turn (🏃 Dash doubles it) — otherwise the token jumps back and the player gets a note. The DM's own moves are never checked. Player panel: 🚶 movement used / max, 🏃 Dash / 🛡 Dodge / 🚪 Disengage buttons (rogues: also as a bonus action).
   Owlbear room setting so players move only their own token: ⚙️ room → Player permissions → tokens: "owner only" (or turn token moving off for players).
+- **⚔️ D&D tool + token window (stage 6):** the background page adds a tool to the Owlbear toolbar (`dndtable/tool`, key Y; it turns on by itself when it is your turn).
+  Click a token or an empty spot with it → a window opens next to it (`card.html?pop=1`, the same code as the context-menu card, `_engine/app/obr-card.js`):
+  yourself → heals, buffs, spells around you, Dash / Dodge / Disengage / Hide, End my turn · an ally → heals, buffs, Help · an enemy → attacks and spells with the distance check, Grapple / Shove · the map → area spells.
+  Areas (Fireball, Burning Hands, Spirit Guardians…) draw a preview only you see and list who is inside (allies too, marked ⚠️; untick whom you spare); click another spot to move it.
+  Spells with several targets (Bless, Magic Missile…) → tick up to N. Who/where each spell aims: `_engine/data/targets.js` (`D.SPELL_TGT`, safe to edit).
+  Spells / features with no dice (Bless, Shield of Faith, Rage, Action Surge…) are cast too: the slot / use is spent, the effect switched on, the text goes to the log.
+  Drag your own token with the tool → a ruler "🚶 20 / 30 ft" (red when too far); on release it moves only if allowed.
+- **Tokens:** a hero's token belongs to its player (the DM's app sets the owner) — turn on "owner only" for characters in the Owlbear room permissions. A player who moves someone else's token sees it jump back. Linked tokens get a tag: monsters "🟡 Hurt", heroes "❤️ 25/40", conditions, 🧠.
+- **⚖️ / 🕊 Strict / free rules (DM top bar):** strict refuses what breaks the rules; free lets players do anything and the log says what was broken.
+- Context menu: "D&D: open in the panel" — the hero's sheet / the monster's stat block (DM).

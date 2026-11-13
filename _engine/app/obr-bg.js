@@ -140,6 +140,7 @@ export function startBackground(OBR, by) {
         turnKey = key; set('obrTurnKey', key);
         try { OBR.notification.show('⚔️ ' + tr('Your turn!', 'Твой ход!') + ' — ' + a.n, 'WARNING'); } catch (e) {}
         try { OBR.action.setBadgeText('!'); OBR.action.setBadgeBackgroundColor('#d9a441'); } catch (e) {}
+        try { OBR.tool.activateTool('dndtable/tool'); } catch (e) {} // your turn: the ⚔️ D&D tool is ready (click, drag)
       } else if (!(a && a.cid && mine.has(a.cid))) { try { OBR.action.setBadgeText(undefined); } catch (e) {} }
     };
 
@@ -211,15 +212,112 @@ export function startBackground(OBR, by) {
       return true;
     };
     window.__obrSync = { by, role, key: onKey, resync };
-    // token card in Owlbear's context menu (one selected item): card.html
+    // token card in Owlbear's context menu (one selected item): card.html; and "📖 open in the panel"
+    const ICON = new URL('icon.svg', location.href).href, LINK = 'dndtable/link';
     try {
       OBR.contextMenu.create({
         id: 'dndtable/card',
-        icons: [{ icon: new URL('icon.svg', location.href).href, label: 'D&D Table', filter: { max: 1 } }],
-        embed: { url: new URL('card.html', location.href).href, height: 300 },
+        icons: [{ icon: ICON, label: 'D&D Table', filter: { max: 1 } }],
+        embed: { url: new URL('card.html', location.href).href, height: 440 },
         onClick() {}
       });
+      OBR.contextMenu.create({
+        id: 'dndtable/open',
+        icons: [{ icon: ICON, label: tr('D&D: open in the panel', 'D&D: открыть в панели'), filter: { max: 1 } }],
+        onClick: async c => {
+          const it = c && c.items && c.items[0]; const l = it && it.metadata && it.metadata[LINK];
+          if (!l) { try { OBR.notification.show(tr('This token is not linked to a hero or a monster.', 'Этот токен не привязан к герою или монстру.'), 'WARNING'); } catch (e) {} return; }
+          set('obrOpen', l.k === 'pc' ? { k: 'hero', id: l.cid, t: Date.now() } : { k: 'mon', n: l.n || '', eid: l.eid || '', t: Date.now() });
+          try { await OBR.action.open(); } catch (e) {}
+        }
+      });
     } catch (e) { console.warn('context menu', e); }
+
+    // ---------- ⚔️ the D&D tool (Owlbear toolbar): click a token / the map → the token window; drag your token → a ruler with your movement ----------
+    const TOOL = 'dndtable/tool', MODE = 'dndtable/mode', POP_ID = 'dndtable/pop', RULER = 'dndtable/ruler';
+    const G = { dpi: 150, mult: 5 };
+    const gridInfo = async () => { try { G.dpi = (await OBR.scene.grid.getDpi()) || 150; const s = await OBR.scene.grid.getScale(); const m = s && s.parsed ? Number(s.parsed.multiplier) : NaN; G.mult = m > 0 ? m : 5; } catch (e) {} };
+    const say = (t, v) => { try { OBR.notification.show(t, v || 'INFO'); } catch (e) {} };
+    async function screenPos(pt) {
+      try {
+        const s = await OBR.viewport.getScale(); const p = await OBR.viewport.getPosition(); const w = await OBR.viewport.getWidth(); const h = await OBR.viewport.getHeight();
+        return { left: Math.round(Math.max(20, Math.min(w - 380, pt.x * s + p.x + 30))), top: Math.round(Math.max(20, Math.min(h - 40, pt.y * s + p.y))) };
+      } catch (e) { return { left: 420, top: 200 }; }
+    }
+    async function openPop(ctx, at) {
+      set('obrPop', Object.assign({ t: Date.now() }, ctx));
+      const pos = await screenPos(at);
+      try { await OBR.popover.close(POP_ID); } catch (e) {}
+      try { await OBR.popover.open({ id: POP_ID, url: new URL('card.html?pop=1', location.href).href, width: 370, height: 560, anchorReference: 'POSITION', anchorPosition: pos, anchorOrigin: { horizontal: 'LEFT', vertical: 'CENTER' }, transformOrigin: { horizontal: 'LEFT', vertical: 'CENTER' }, disableClickAway: true }); }
+      catch (e) { console.warn('popover', e); }
+    }
+    async function toolClick(ctx, ev) {
+      const aim = get('obrAim', null);
+      if (aim && Date.now() - (aim.t || 0) < 15 * 60000) { set('obrAim', Object.assign({}, aim, { point: ev.pointerPosition, t: Date.now() })); return; } // placing an area: move it here
+      let tg = ev.target || null;
+      if (tg && tg.layer !== 'CHARACTER') tg = tg.attachedTo ? { id: tg.attachedTo } : null; // a ring / a tag → its token; the map → a point
+      await openPop(tg ? { id: tg.id, point: null } : { id: '', point: ev.pointerPosition }, ev.pointerPosition);
+    }
+    // dragging: the token follows the mouse only on this screen (interaction); on release it really moves — if the move is allowed
+    let drag = null;
+    async function dragStart(ctx, ev) {
+      const it = ev.target; if (!it || it.layer !== 'CHARACTER') return;
+      const l = it.metadata && it.metadata[LINK];
+      const st = get(DM ? 'obrdm' : 'obrstate', null); const strict = !st || st.strict !== false;
+      if (!DM && strict) { const mine = new Set(get('chars', []).map(c => c.id)); if (!l || l.k !== 'pc' || !mine.has(l.cid)) { say(tr('This is not your token — only the DM moves it.', 'Это не твой токен — его двигает мастер.'), 'WARNING'); return; } }
+      await gridInfo();
+      const e = st && st.on && l ? (st.list || []).find(x => l.k === 'pc' ? x.cid === l.cid : x.id === l.eid || x.n === l.n) : null;
+      let left = null;
+      if (!DM && strict && e) { const myTurn = st.list[st.turn] && st.list[st.turn].id === e.id; left = myTurn ? Math.max(0, (e.mvMax || 30) - (e.mv || 0)) : 0; if (!myTurn) say(tr('Not your turn — you cannot move now.', 'Сейчас не твой ход — двигаться нельзя.'), 'WARNING'); }
+      drag = { id: it.id, start: it.position, pos: it.position, off: { x: it.position.x - ev.pointerPosition.x, y: it.position.y - ev.pointerPosition.y }, left, ft: 0 };
+      try { const [update, stop] = await OBR.interaction.startItemInteraction(it); if (drag && drag.id === it.id) { drag.update = update; drag.stop = stop; } else stop(); } catch (er) { console.warn('interaction', er); }
+    }
+    let rulerIds = null;
+    async function drawRuler(a, b, text, ok) {
+      const B = window.OBR_SDK; if (!B || !B.buildCurve || !B.buildLabel) return;
+      try {
+        const col = ok ? '#7bd389' : '#e05555';
+        if (!rulerIds) {
+          const line = B.buildCurve().points([{ x: 0, y: 0 }, { x: b.x - a.x, y: b.y - a.y }]).position(a).strokeColor(col).strokeWidth(6).strokeOpacity(0.9).fillOpacity(0).tension(0).closed(false).layer('RULER').disableHit(true).metadata({ [RULER]: 1 }).build();
+          const lab = B.buildLabel().plainText(text).position(b).layer('RULER').disableHit(true).backgroundOpacity(0.85).fontSize(22).metadata({ [RULER]: 2 }).build();
+          rulerIds = [line.id, lab.id]; await OBR.scene.local.addItems([line, lab]);
+        } else {
+          await OBR.scene.local.updateItems(rulerIds, L => { L.forEach(x => { if (x.metadata[RULER] === 1) { x.position = a; x.points = [{ x: 0, y: 0 }, { x: b.x - a.x, y: b.y - a.y }]; x.style.strokeColor = col; } else { x.position = b; x.text.plainText = text; } }); }, true);
+        }
+      } catch (e) { console.warn('ruler', e); }
+    }
+    async function clearRuler() { const ids = rulerIds; rulerIds = null; try { const L = await OBR.scene.local.getItems(it => it.metadata && it.metadata[RULER]); if (L.length) await OBR.scene.local.deleteItems(L.map(x => x.id)); else if (ids) await OBR.scene.local.deleteItems(ids); } catch (e) {} }
+    async function dragMove(ctx, ev) {
+      const d = drag; if (!d) return;
+      let pos = { x: ev.pointerPosition.x + d.off.x, y: ev.pointerPosition.y + d.off.y };
+      try { pos = await OBR.scene.grid.snapPosition(pos, 1, false, true); } catch (e) {}
+      if (drag !== d) return;
+      d.pos = pos; if (d.update) try { d.update(x => { x.position = pos; }); } catch (e) {}
+      let ft = 0; try { ft = Math.round(await OBR.scene.grid.getDistance(d.start, pos)) * G.mult; } catch (e) {}
+      d.ft = ft; const ok = d.left == null || ft <= d.left;
+      await drawRuler(d.start, pos, (ok ? '🚶 ' : '⛔ ') + ft + (d.left != null ? ' / ' + d.left : '') + ' ' + tr('ft', 'фт'), ok);
+    }
+    async function dragEnd() {
+      const d = drag; drag = null; if (!d) return;
+      try { if (d.stop) d.stop(); } catch (e) {}
+      await clearRuler();
+      if (!d.pos || (d.pos.x === d.start.x && d.pos.y === d.start.y)) return;
+      if (d.left != null && d.ft > d.left) { say(d.left ? tr('Too far: you have {0} ft of movement left.', 'Слишком далеко: осталось {0} фт движения.').replace('{0}', d.left) : tr('No movement left (or not your turn).', 'Движения не осталось (или сейчас не твой ход).'), 'WARNING'); return; }
+      try { await OBR.scene.items.updateItems([d.id], L => { L.forEach(x => { x.position = d.pos; }); }); } catch (e) { say(tr('Owlbear did not let you move this token.', 'Owlbear не дал сдвинуть этот токен.'), 'ERROR'); }
+    }
+    async function dragCancel() { const d = drag; drag = null; if (d && d.stop) try { d.stop(); } catch (e) {} await clearRuler(); }
+    try {
+      await OBR.tool.create({ id: TOOL, icons: [{ icon: ICON, label: tr('D&D: actions and movement', 'D&D: действия и ход') }], defaultMode: MODE, shortcut: 'Y' });
+      await OBR.tool.createMode({
+        id: MODE, icons: [{ icon: ICON, label: tr('Click a token or the map · drag your token', 'Клик по токену или карте · тяни свой токен'), filter: { activeTools: [TOOL] } }],
+        cursors: [{ cursor: 'pointer', filter: { target: [{ key: 'layer', value: 'CHARACTER' }] } }, { cursor: 'crosshair' }],
+        onToolClick: (c, e) => { toolClick(c, e); return false; },
+        onToolDragStart: dragStart, onToolDragMove: dragMove, onToolDragEnd: dragEnd, onToolDragCancel: dragCancel,
+        onKeyDown: (c, e) => { if (e.key === 'Escape') set('obrAim', null); },
+        onDeactivate: () => { set('obrAim', null); }
+      });
+    } catch (e) { console.warn('tool', e); }
+
     sendNewLog();
     console.log('D&D Table sync ready:', role, by);
   });

@@ -1068,5 +1068,17 @@ window.DND_RU.UI = {
   'Powers you can use': 'Способности, которые можно использовать',
   'Nothing with uses yet — your attacks and spells are above.': 'Пока нечего использовать — атаки и заклинания выше.',
   'Always on and already counted ({0})': 'Работает всегда и уже учтено ({0})',
-  'passive bonuses and choices you made — the app already uses them': 'пассивные бонусы и сделанный выбор — приложение уже всё учитывает'
+  'passive bonuses and choices you made — the app already uses them': 'пассивные бонусы и сделанный выбор — приложение уже всё учитывает',
+  '(cast)': '(наложить)',
+  'Choose a target first.': 'Сначала выбери цель.',
+  'Free rules: allowed anyway': 'Свободные правила: разрешено, хотя',
+  'Free rules: players may do anything, the log only says what broke the rules. Click for strict rules.': 'Свободные правила: игрокам можно всё, журнал только пишет, что нарушено. Нажми — строгие правила.',
+  'Strict rules: the app refuses what breaks the rules (turns, distance, movement, slots). Click for free rules.': 'Строгие правила: приложение не даёт нарушать правила (очередь, дистанция, движение, ячейки). Нажми — свободные правила.',
+  'Grapple': 'Захват', 'Help': 'Помощь', 'Shove': 'Толчок',
+  'Hide: Stealth check': 'Спрятаться: проверка Скрытности',
+  'hidden (enemies must find you)': 'спрятался (врагам надо тебя найти)', 'not hidden': 'не спрятался',
+  'This is not your token — only the DM moves it.': 'Это не твой токен — его двигает мастер.',
+  'cantrip': 'заговор', 'uses': 'заряды',
+  'On the map: pick the ⚔️ D&D tool in the Owlbear toolbar (key Y). Click a token or an empty spot — the window shows what you can do there. Drag your token — a ruler shows your movement.': 'На карте: выбери инструмент ⚔️ D&D в панели инструментов Owlbear (клавиша Y). Кликни по токену или пустому месту — окно покажет, что там можно сделать. Тяни свой токен — линейка покажет движение.',
+  'the next attack roll or check of this ally (before your next turn) has Advantage.': 'следующая атака или проверка этого союзника (до твоего следующего хода) — с преимуществом.'
 };

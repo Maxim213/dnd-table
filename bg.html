@@ -9,7 +9,7 @@
   const SDK = 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
   (async () => {
     try {
-      const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr')) : (await import(SDK)).default;
+      const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr')) : await import(SDK).then(m => { window.OBR_SDK = m; return m.default; });
       const { startBackground } = await import('./_engine/app/obr-bg.js');
       startBackground(OBR);
     } catch (e) { console.error('D&D Table background:', e); }

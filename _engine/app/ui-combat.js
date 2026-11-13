@@ -453,13 +453,21 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       // turn economy: what this costs; the DM may still click it (only a warning), players' requests are checked before (online.js)
       const econ = active.econ = active.econ || U.econNew();
       const spend = a => { const k = ds.cost || U.actCost(a); if (k !== '-' && econ[k] >= 1 && !ds.remote) U.toast('⚠️ ' + T('Already used this turn: {0}. (You are the DM — it still works.)', T(ECON_NAME[k]))); if (k !== '-') econ[k] = (econ[k] || 0) + 1; };
+      // several chosen targets (Bless, Magic Missile darts split between them, an area placed on the map): ds.tids
+      const tl = Array.isArray(ds.tids) ? ds.tids.map(id => cb.list.find(x => x.id === id)).filter(Boolean).map(U.cbTarget).filter(Boolean) : null;
+      const res = (a, att) => {
+        if (!tl) return U.resolve(a, att, pick(a));
+        if (a.save || (!tl.length)) return U.resolve(a, att, a.save ? tl : null);
+        const n = tl.length, cnt = a.count > 1 ? a.count : 0;
+        return tl.flatMap((tg, i) => { const k = cnt ? Math.floor(cnt / n) + (i < cnt % n ? 1 : 0) : 1; return k ? U.resolve(cnt ? Object.assign({}, a, { count: k }) : a, att, tg) : []; });
+      };
       if (active.type === 'pc') {
         const c = U.byId(active.charId); const d = E.compute(c); let a = d.actions.find(x => x.id === ds.aid); if (!a) return;
         if (ds.one) a = Object.assign({}, a, { count: 1 }); // a reaction attack (opportunity attack) is ONE attack
         const w = U.spendFor(c, d, a); who = c.name;
         if (/⚠️/.test(w)) { U.toast(w); return; }
         spend(a); // only when it really happens (not when out of slots / uses)
-        lines = ['<b>' + esc(a.name) + '</b>' + (w ? ' <small>(' + w + ')</small>' : '')].concat(U.resolve(a, U.attackerOf(c), pick(a)));
+        lines = ['<b>' + esc(a.name) + '</b>' + (w ? ' <small>(' + w + ')</small>' : '')].concat(res(a, U.attackerOf(c)));
         U.saveChars();
       } else {
         const a = monActions(active).find(x => x.id === ds.aid); if (!a || a.blocked) return; who = active.name; spend(a);
@@ -468,7 +476,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
           active.used = active.used || {}; active.used[ab.id] = (active.used[ab.id] || 0) + 1;
           if (Number(ab.recharge) > 0) { active.spent = active.spent || {}; active.spent[ab.id] = true; }
         }
-        lines = ['<b>' + esc(a.name) + '</b>' + (a.desc && !a.plain ? ' <i>' + esc(a.desc) + '</i>' : '')].concat(U.resolve(a, { name: active.name, ctx: { lvl: 1, pb: 2, mod: modsOf(active.abil) } }, pick(a)));
+        lines = ['<b>' + esc(a.name) + '</b>' + (a.desc && !a.plain ? ' <i>' + esc(a.desc) + '</i>' : '')].concat(res(a, { name: active.name, ctx: { lvl: 1, pb: 2, mod: modsOf(active.abil) } }));
       }
       U.saveCombat(); U.logAdd(who, lines); U.render();
     },

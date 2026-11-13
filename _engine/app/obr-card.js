@@ -1,15 +1,24 @@
-// Token card: shown inside Owlbear's context menu when ONE token is selected (card.html, an ES module).
+// The token window (card.html, an ES module). Two places show it:
+//   • Owlbear's context menu (right click / select ONE token → "D&D Table")      → card.html            (what: the selected token)
+//   • a window next to the click with the ⚔️ D&D tool (obr-bg.js opens it)       → card.html?pop=1      (what: obrPop = { id } token or { point } map)
 // A token is linked to a hero or a fight entry through its metadata 'dndtable/link':
-//   { k: 'pc', cid, n }  — a hero (by id)          { k: 'mon', eid, n } — a monster in the fight (by entry id, or by name)
-// DM:     link / unlink, see the real numbers, change a monster's HP, make it the target of the active combatant.
-// Player: see heroes (HP, AC) and monsters (only "hurt", "badly hurt"…), and ATTACK the monster right from the card.
-// The card reads the same browser storage as the panel (same site): obrdm / obrstate / obrmenu / chars / combat.
-export function startCard(OBR) {
-  const LINK = 'dndtable/link', CH = 'dndtable/v1';
+//   { k: 'pc', cid, n } — a hero (by id)          { k: 'mon', eid, n } — a monster in the fight (by entry id, or by name)
+// In a fight a player sees what his hero can do RIGHT HERE:
+//   click yourself → heals, buffs, Dash / Dodge / Disengage / Hide, spells around you, End my turn
+//   click an ally  → heals, buffs, Help            click an enemy → attacks, spells, Grapple / Shove (with the distance check)
+//   click the map  → area spells (Fireball, Burning Hands…): a preview shows who is inside before you cast
+// Outside a fight: a short card (who it is, HP / health, 📜 open in the panel).
+// The DM gets his tools: link / unlink, real numbers, damage / heal, make it the target of whoever acts now.
+// Everything a player does goes to the DM's app (broadcast 'act'), which checks the rules, rolls and applies it.
+export function startCard(OBR, opts) {
+  opts = opts || {};
+  const POP = !!opts.pop;
+  const LINK = 'dndtable/link', CH = 'dndtable/v1', POP_ID = 'dndtable/pop', PREV = 'dndtable/preview';
   const ruOn = () => { try { return (localStorage.getItem('dnd.lang') || 'ru') === 'ru'; } catch (e) { return true; } };
   const tr = (en, ru) => (ruOn() ? ru : en);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const ST = { ok: ['Unhurt', 'Цел', '🟢'], hurt: ['Hurt', 'Ранен', '🟡'], bloodied: ['Badly hurt', 'Сильно ранен', '🟠'], dying: ['Barely alive', 'Еле жив', '🔴'], down: ['Down', 'Повержен', '💀'] };
+  const COST = { a: ['🗡', 'Action', 'Действие'], b: ['⚡', 'Bonus', 'Бонусное'], r: ['🛡', 'Reaction', 'Реакция'], '-': ['', 'free', 'бесплатно'] };
   const el = document.getElementById('card');
   OBR.onReady(async () => {
     const role = await OBR.player.getRole(); const DM = role === 'GM';
@@ -18,40 +27,138 @@ export function startCard(OBR) {
     const set = (k, v) => { try { localStorage.setItem(P + k, JSON.stringify(v)); } catch (e) {} };
     const game = () => (DM ? get('curGame', null) : '');
     const gk = k => (DM ? 'g.' + game() + '.' + k : k);
-    let item = null, mode = 'normal', note = '';
+    let item = null, point = null, mode = 'normal', note = '', view = null; // view: null | { multi: entry } | { area: entry, pt, picked }
+    let busy = false;
 
+    // ---------- what was clicked ----------
     async function load() {
-      try { const sel = await OBR.player.getSelection(); item = sel && sel.length === 1 ? ((await OBR.scene.items.getItems(sel))[0] || null) : null; } catch (e) { item = null; }
+      item = null; point = null;
+      try {
+        if (POP) {
+          const c = get('obrPop', null) || {};
+          if (c.id) item = (await OBR.scene.items.getItems([c.id]))[0] || null;
+          point = c.point || null;
+        } else {
+          const sel = await OBR.player.getSelection(); item = sel && sel.length === 1 ? ((await OBR.scene.items.getItems(sel))[0] || null) : null;
+        }
+        if (item && item.layer !== 'CHARACTER' && item.attachedTo) item = (await OBR.scene.items.getItems([item.attachedTo]))[0] || item; // clicked a tag / ring
+      } catch (e) { item = null; }
     }
-    const bar = (hp, mx) => '<div class="tc-bar"><i style="width:' + Math.max(0, Math.min(100, Math.round((hp / (mx || 1)) * 100))) + '%"></i></div>';
-    const conds = cs => (cs && cs.length ? '<div class="tc-sub">⚠️ ' + cs.map(esc).join(', ') + '</div>' : '');
-    const head = (pic, name, sub) => '<div class="tc-head">' + (pic ? '<img class="tc-pic" src="' + esc(pic) + '">' : '<div class="tc-pic">' + esc(String(name || '?').slice(0, 1)) + '</div>') + '<div><div class="tc-name">' + esc(name) + '</div><div class="tc-sub">' + sub + '</div></div></div>';
     const linkOf = it => (it && it.metadata && it.metadata[LINK]) || null;
-
-    // the fight: DM → his own numbers (obrdm) + the live fight from storage; player → the public summary
     const fightPub = () => get(DM ? 'obrdm' : 'obrstate', null);
     const combat = () => (DM ? get(gk('combat'), null) : null);
     const monEntry = lk => {
       if (DM) { const cb = combat(); const L = (cb && cb.list) || []; return L.find(x => x.id === lk.eid) || L.find(x => x.type === 'mon' && x.name === lk.n) || null; }
       const f = fightPub(); const L = (f && f.list) || []; return L.find(x => x.id === lk.eid) || L.find(x => x.k === 'mon' && x.n === lk.n) || null;
     };
+    const entryOfLink = lk => { const f = fightPub(); const L = (f && f.list) || []; if (!lk) return null; return lk.k === 'pc' ? L.find(x => x.cid === lk.cid) || null : L.find(x => x.id === lk.eid) || L.find(x => x.k === 'mon' && x.n === lk.n) || null; };
     const heroInfo = cid => {
       const f = fightPub() || {}; const inFight = (f.list || []).find(x => x.cid === cid); const party = (f.party || []).find(x => x.id === cid);
       const own = get(gk('chars'), []).find(c => c.id === cid);
       return { n: (own && own.name) || (party && party.n) || (inFight && inFight.n) || '?', lvl: (own && own.level) || (party && party.lvl) || '', hp: (inFight || party || {}).hp, mx: (inFight || party || {}).mx, ac: (inFight || party || {}).ac, cond: (inFight || party || {}).cond || [], pic: own ? (own.portraitThumb || own.portrait || '') : '', mine: !DM && !!own };
     };
+    const bar = (hp, mx) => '<div class="tc-bar"><i style="width:' + Math.max(0, Math.min(100, Math.round((hp / (mx || 1)) * 100))) + '%"></i></div>';
+    const CRU = { Blinded: 'Ослеплён', Charmed: 'Очарован', Deafened: 'Оглох', Exhaustion: 'Истощение', Frightened: 'Напуган', Grappled: 'Схвачен', Incapacitated: 'Недееспособен', Invisible: 'Невидим', Paralyzed: 'Парализован', Petrified: 'Окаменел', Poisoned: 'Отравлен', Prone: 'Сбит с ног', Restrained: 'Опутан', Stunned: 'Ошеломлён', Unconscious: 'Без сознания', Concentrating: 'Концентрация' };
+    const conds = cs => (cs && cs.length ? '<div class="tc-sub">⚠️ ' + cs.map(x => esc(ruOn() ? CRU[x] || x : x)).join(', ') + '</div>' : '');
+    const head = (pic, name, sub) => '<div class="tc-head">' + (pic ? '<img class="tc-pic" src="' + esc(pic) + '">' : '<div class="tc-pic">' + esc(Array.from(String(name || '?'))[0]) + '</div>') + '<div><div class="tc-name">' + esc(name) + '</div><div class="tc-sub">' + sub + '</div></div>' + (POP ? '<button class="tc-x" data-do="close" title="' + tr('Close', 'Закрыть') + '">✕</button>' : '') + '</div>';
 
-    function render() {
-      let h = '';
-      if (!item) h = '<p class="tc-msg">' + tr('Select one token.', 'Выдели один токен.') + '</p>';
-      else {
-        const lk = linkOf(item);
-        if (!lk) h = DM ? linkChooser() : '<p class="tc-msg">' + tr('This token is not linked. The DM can link it to a hero or a monster.', 'Этот токен не привязан. Мастер может привязать его к герою или монстру.') + '</p>';
-        else if (lk.k === 'pc') h = heroCard(lk);
-        else h = monCard(lk);
+    // ---------- the map: tokens, distances, shapes ----------
+    const G = { dpi: 150, mult: 5 };
+    async function grid() { try { G.dpi = (await OBR.scene.grid.getDpi()) || 150; const s = await OBR.scene.grid.getScale(); const m = s && s.parsed ? Number(s.parsed.multiplier) : NaN; G.mult = m > 0 ? m : 5; } catch (e) {} }
+    const linkedTokens = async () => { try { return await OBR.scene.items.getItems(it => it.layer === 'CHARACTER' && !!linkOf(it)); } catch (e) { return []; } };
+    const tokenOfEntry = (toks, e) => toks.find(t => { const l = linkOf(t); return e.k === 'pc' || e.cid ? l.k === 'pc' && l.cid === e.cid : l.k === 'mon' && (l.eid === e.id || l.n === e.n); }) || null;
+    async function boundsOf(t) { try { return await OBR.scene.items.getItemBounds([t.id]); } catch (e) { return null; } }
+    async function feet(b1, b2) { // edge to edge, like the DM's app
+      if (!b1 || !b2) return null;
+      try {
+        const cells = await OBR.scene.grid.getDistance(b1.center, b2.center);
+        const s1 = Math.max(1, Math.round(Math.max(b1.width, b1.height) / G.dpi)), s2 = Math.max(1, Math.round(Math.max(b2.width, b2.height) / G.dpi));
+        return Math.max(1, Math.round(cells - (s1 - 1) / 2 - (s2 - 1) / 2)) * G.mult;
+      } catch (e) { return null; }
+    }
+    async function feetTo(b, pt) { if (!b || !pt) return null; try { return Math.round(await OBR.scene.grid.getDistance(b.center, pt)) * G.mult; } catch (e) { return null; } }
+    // an area as a polygon in map pixels: sphere / cylinder / aura = circle, cube / square, cone, line (5 ft wide)
+    function shapePoly(area, origin, toward, originB) {
+      const px = G.dpi / G.mult; const n = area.n * px; const P = [];
+      let dx = (toward ? toward.x - origin.x : 1), dy = (toward ? toward.y - origin.y : 0); const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+      const half = originB ? Math.max(originB.width, originB.height) / 2 : 0; const nx = -dy, ny = dx;
+      if (area.s === 'sphere' || area.s === 'cylinder' || area.s === 'aura') {
+        const r = area.s === 'aura' ? n + half : n; const c = area.s === 'aura' || area.o === 's' && !toward ? origin : origin;
+        for (let i = 0; i < 32; i++) { const a = (i / 32) * Math.PI * 2; P.push({ x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r }); }
+      } else if (area.s === 'cube' || area.s === 'square') {
+        const c = area.o === 's' ? { x: origin.x + dx * (half + n / 2), y: origin.y + dy * (half + n / 2) } : origin; const h = n / 2;
+        if (area.o === 's') [[-h, -h], [h, -h], [h, h], [-h, h]].forEach(([u, v]) => P.push({ x: c.x + dx * u + nx * v, y: c.y + dy * u + ny * v }));
+        else [[-h, -h], [h, -h], [h, h], [-h, h]].forEach(([u, v]) => P.push({ x: c.x + u, y: c.y + v }));
+      } else if (area.s === 'cone') {
+        const a0 = { x: origin.x + dx * half, y: origin.y + dy * half }; const e = { x: a0.x + dx * n, y: a0.y + dy * n };
+        P.push(a0, { x: e.x + nx * n / 2, y: e.y + ny * n / 2 }, { x: e.x - nx * n / 2, y: e.y - ny * n / 2 });
+      } else { // line, 5 ft wide
+        const w = 2.5 * px; const a0 = { x: origin.x + dx * half, y: origin.y + dy * half }; const e = { x: a0.x + dx * n, y: a0.y + dy * n };
+        P.push({ x: a0.x + nx * w, y: a0.y + ny * w }, { x: e.x + nx * w, y: e.y + ny * w }, { x: e.x - nx * w, y: e.y - ny * w }, { x: a0.x - nx * w, y: a0.y - ny * w });
       }
-      if (note) h += '<p class="tc-msg">' + note + '</p>';
-      el.innerHTML = h;
+      return P;
+    }
+    const inPoly = (p, P) => { let ins = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if (((a.y > p.y) !== (b.y > p.y)) && (p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)) ins = !ins; } return ins; };
+    // a token is inside when the centre of any square it covers is inside (big monsters cover several squares)
+    const tokenIn = (b, P) => {
+      const k = Math.max(1, Math.round(Math.max(b.width, b.height) / G.dpi)); const s = b.width / k;
+      for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) if (inPoly({ x: b.center.x - b.width / 2 + s * (i + 0.5), y: b.center.y - b.height / 2 + s * (j + 0.5) }, P)) return true;
+      return false;
+    };
+    async function drawPreview(P) {
+      await clearPreview();
+      if (!window.OBR_SDK || !window.OBR_SDK.buildCurve) return;
+      try {
+        const o = P[0]; const pts = P.map(p => ({ x: p.x - o.x, y: p.y - o.y }));
+        const cv = window.OBR_SDK.buildCurve().points(pts).position(o).fillColor('#e0662f').fillOpacity(0.28).strokeColor('#f2c96b').strokeWidth(4).strokeOpacity(0.9).tension(0).closed(true).layer('DRAWING').locked(true).disableHit(true).metadata({ [PREV]: true }).build();
+        await OBR.scene.local.addItems([cv]);
+      } catch (e) { console.warn('preview', e); }
+    }
+    async function clearPreview() { try { const L = await OBR.scene.local.getItems(it => it.metadata && it.metadata[PREV]); if (L.length) await OBR.scene.local.deleteItems(L.map(it => it.id)); } catch (e) {} }
+
+    // ---------- render ----------
+    async function render() {
+      if (busy) return; busy = true;
+      try { el.innerHTML = await build() + (note ? '<p class="tc-msg">' + note + '</p>' : ''); }
+      catch (e) { el.innerHTML = '<p class="tc-msg">⚠️ ' + esc(e.message || e) + '</p>'; console.warn(e); }
+      finally { busy = false; }
+    }
+    async function build() {
+      const lk = linkOf(item);
+      if (!item && !point) return '<p class="tc-msg">' + tr('Select one token.', 'Выдели один токен.') + '</p>';
+      if (DM) return dmCard(lk);
+      const f = fightPub();
+      if (f && f.on) { const w = await fightWindow(f, lk); if (w) return w; }
+      if (!item) return '<p class="tc-msg">' + tr('No fight right now — nothing to cast here.', 'Сейчас нет боя — здесь нечего применять.') + '</p>';
+      if (!lk) return '<p class="tc-msg">' + tr('This token is not linked. The DM can link it to a hero or a monster.', 'Этот токен не привязан. Мастер может привязать его к герою или монстру.') + '</p>';
+      return lk.k === 'pc' ? heroCard(lk) : monCard(lk);
+    }
+
+    // ---------- outside a fight / the DM ----------
+    function heroCard(lk) {
+      const h = heroInfo(lk.cid);
+      let out = head(h.pic, h.n, (h.lvl ? tr('Level', 'Уровень') + ' ' + h.lvl + ' · ' : '') + (h.ac != null ? tr('AC', 'КД') + ' ' + h.ac : ''));
+      if (h.hp != null) out += bar(h.hp, h.mx) + '<div class="tc-sub">❤️ ' + h.hp + ' / ' + h.mx + '</div>';
+      out += conds(h.cond);
+      out += '<div class="tc-row">' + (h.mine || DM ? '<button data-do="sheet" data-id="' + esc(lk.cid) + '">📖 ' + tr('Open in the panel', 'Открыть в панели') + '</button>' : '') +
+        (DM ? '<button data-do="target">🎯 ' + tr('Target', 'Цель') + '</button><button data-do="unlink">✂️ ' + tr('Unlink', 'Отвязать') + '</button>' : '') + '</div>';
+      return out;
+    }
+    function monCard(lk) {
+      const e = monEntry(lk);
+      if (!e) return head('', lk.n || '?', tr('not in the fight now', 'сейчас не в бою')) + (DM ? '<div class="tc-row"><button data-do="openmon" data-n="' + esc(lk.n || '') + '">📖 ' + tr('Open in the panel', 'Открыть в панели') + '</button><button data-do="unlink">✂️ ' + tr('Unlink', 'Отвязать') + '</button></div>' : '');
+      if (DM) {
+        return head('', e.name, (e.cr ? tr('CR', 'ПО') + ' ' + esc(e.cr) + ' · ' : '') + tr('AC', 'КД') + ' ' + esc(e.ac)) + bar(e.hp, e.hpMax) + '<div class="tc-sub">❤️ ' + e.hp + ' / ' + e.hpMax + '</div>' + conds(e.conditions) +
+          '<div class="tc-row"><input type="number" min="0" id="amt" placeholder="0"><button data-do="dmg">− ' + tr('Damage', 'Урон') + '</button><button data-do="heal">+ ' + tr('Heal', 'Лечить') + '</button></div>' +
+          '<div class="tc-row"><button data-do="target">🎯 ' + tr('Target of the active one', 'Цель того, кто ходит') + '</button><button data-do="openmon" data-n="' + esc(e.name || '') + '">📖 ' + tr('Panel', 'Панель') + '</button><button data-do="unlink">✂️</button></div>';
+      }
+      const s = ST[e.st] || ST.ok;
+      return head('', e.n, s[2] + ' ' + (ruOn() ? s[1] : s[0])) + conds(e.cond);
+    }
+    function dmCard(lk) {
+      if (!item) return '<p class="tc-msg">' + tr('Click a token.', 'Кликни по токену.') + '</p>';
+      if (!lk) return linkChooser();
+      return lk.k === 'pc' ? heroCard(lk) : monCard(lk);
     }
     function linkChooser() {
       const chars = get(gk('chars'), []); const cb = combat(); const mons = ((cb && cb.list) || []).filter(x => x.type === 'mon');
@@ -60,64 +167,184 @@ export function startCard(OBR) {
         (chars.length ? chars.map(c => '<button data-l="pc" data-id="' + esc(c.id) + '" data-n="' + esc(c.name) + '">🧙 ' + esc(c.name || '?') + (c.obr ? ' <small>🦉 ' + esc(c.obr.name) + '</small>' : '') + '</button>').join('') : '') +
         (mons.length ? '<h4>⚔️ ' + tr('In the fight', 'В бою') + '</h4>' + mons.map(x => '<button data-l="mon" data-id="' + esc(x.id) + '" data-n="' + esc(x.name) + '">👹 ' + esc(x.name) + '</button>').join('') : '<p class="tc-msg">' + tr('Monsters appear here once they are in the fight.', 'Монстры появятся здесь, когда будут в бою.') + '</p>') + '</div>';
     }
-    function heroCard(lk) {
-      const h = heroInfo(lk.cid);
-      let out = head(h.pic, h.n, (h.lvl ? tr('Level', 'Уровень') + ' ' + h.lvl + ' · ' : '') + (h.ac != null ? tr('AC', 'КД') + ' ' + h.ac : ''));
-      if (h.hp != null) out += bar(h.hp, h.mx) + '<div class="tc-sub">❤️ ' + h.hp + ' / ' + h.mx + '</div>';
-      out += conds(h.cond);
-      out += '<div class="tc-row">' + (h.mine ? '<button data-do="sheet" data-id="' + esc(lk.cid) + '">📜 ' + tr('My sheet', 'Мой лист') + '</button>' : '') +
-        (DM ? '<button data-do="target">🎯 ' + tr('Target', 'Цель') + '</button><button data-do="unlink">✂️ ' + tr('Unlink', 'Отвязать') + '</button>' : '') + '</div>';
-      return out;
+
+    // ---------- a player in a fight: what can I do with what I clicked ----------
+    let lastCtx = null; // for clicks: { f, meIn, hero, ft, tEntry, kind, myB, toks }
+    async function fightWindow(f, lk) {
+      const menu = get('obrmenu', []); const mine = new Set(menu.map(m => m.cid));
+      const meIn = (f.list || []).find(x => x.cid && mine.has(x.cid));
+      if (!meIn) return '';
+      const hero = menu.find(m => m.cid === meIn.cid); if (!hero) return '';
+      await grid();
+      const toks = await linkedTokens(); const myTok = tokenOfEntry(toks, meIn); const myB = myTok ? await boundsOf(myTok) : null;
+      let kind = 'point', tEntry = null, ft = null, tb = null;
+      if (item) {
+        if (!lk) return '';
+        tEntry = entryOfLink(lk);
+        if (!tEntry) return '';
+        kind = tEntry.cid && tEntry.cid === meIn.cid ? 'self' : tEntry.k === 'pc' ? 'ally' : 'enemy';
+        tb = await boundsOf(item); ft = kind === 'self' ? 0 : await feet(myB, tb);
+      } else if (point) ft = await feetTo(myB, point);
+      const myTurn = f.list[f.turn] && f.list[f.turn].cid === meIn.cid; const ec = meIn.ec || { a: 0, b: 0, r: 0 }; const strict = f.strict !== false;
+      lastCtx = { f, meIn, hero, ft, tEntry, kind, myB, toks, tb };
+      if (view && view.area) return areaView();
+      if (view && view.multi) return multiView();
+      // header
+      let h;
+      if (kind === 'point') h = head('', '📍 ' + tr('A spot on the map', 'Точка на карте'), (ft != null ? '📏 ' + ft + ' ' + tr('ft from you', 'фт от тебя') : tr('your token is not on the map', 'твоего токена нет на карте')));
+      else if (kind === 'self') h = head(heroInfo(meIn.cid).pic, hero.n + ' — ' + tr('you', 'ты'), '❤️ ' + meIn.hp + ' / ' + meIn.mx + ' · ' + tr('AC', 'КД') + ' ' + meIn.ac);
+      else if (kind === 'ally') h = head(heroInfo(tEntry.cid).pic, tEntry.n, '❤️ ' + tEntry.hp + ' / ' + tEntry.mx + (ft != null ? ' · 📏 ' + ft + ' ' + tr('ft', 'фт') : ''));
+      else { const s = ST[tEntry.st] || ST.ok; h = head('', tEntry.n, s[2] + ' ' + (ruOn() ? s[1] : s[0]) + (ft != null ? ' · 📏 ' + ft + ' ' + tr('ft', 'фт') : '')); }
+      h += conds(kind === 'point' ? [] : tEntry.cond);
+      h += '<div class="tc-turn">' + (myTurn ? '⚔️ <b>' + tr('Your turn', 'Твой ход') + '</b>' : '⏳ ' + tr('Not your turn — reactions only', 'Не твой ход — только реакция')) + ' · ' +
+        ['a', 'b', 'r'].map(k => '<span class="tc-ec' + (ec[k] ? ' used' : '') + '">' + COST[k][0] + '</span>').join('') +
+        ' · 🚶 ' + (meIn.mv || 0) + '/' + (meIn.mvMax || hero.speed || 30) + ' ' + tr('ft', 'фт') + (strict ? '' : ' · 🕊 ' + tr('free rules', 'свободные правила')) + '</div>';
+      // which actions fit what was clicked
+      const acts = hero.acts || [];
+      const pick = kind === 'self' ? acts.filter(a => (['s', 'a', 'x'].includes(a.tk) && !a.area) || (a.area && a.area.o === 'u'))
+        : kind === 'ally' ? acts.filter(a => ['a', 'x'].includes(a.tk) && !a.area)
+          : kind === 'enemy' ? acts.filter(a => ['e', 'x'].includes(a.tk) && !a.area)
+            : acts.filter(a => a.area && a.area.o !== 'u');
+      const groups = kind === 'self' ? [[tr('❤️ Heal and help yourself', '❤️ Лечение и усиления на себя'), pick.filter(a => !a.area && (a.heal || a.tk !== 'n'))], [tr('🌀 Around you', '🌀 Вокруг тебя'), pick.filter(a => a.area)]]
+        : kind === 'point' ? [[tr('💥 Areas — click one to see who it hits', '💥 Области — нажми, чтобы увидеть, кого заденет'), pick]]
+          : [[kind === 'enemy' ? tr('⚔️ Against this enemy', '⚔️ Против этого врага') : tr('❤️ For this ally', '❤️ Для союзника'), pick]];
+      if (kind === 'enemy') h += '<div class="tc-row tc-mode">' + [['normal', tr('Normal', 'Обычно')], ['adv', '⬆ ' + tr('Advantage', 'Преимущество')], ['dis', '⬇ ' + tr('Disadvantage', 'Помеха')]].map(m => '<button data-mode="' + m[0] + '" class="' + (mode === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>';
+      groups.forEach(([title, list]) => { if (list.length) h += '<h4>' + title + '</h4><div class="tc-acts">' + list.map(a => actBtn(a, kind, ft, myTurn, ec, strict)).join('') + '</div>'; });
+      if (!groups.some(g => g[1].length) && kind !== 'self') h += '<p class="tc-msg">' + (kind === 'point' ? tr('Your hero has no area spells.', 'У твоего героя нет заклинаний по области.') : tr('Nothing to use on this one.', 'Нечего применить на эту цель.')) + '</p>';
+      // basic actions
+      const basic = (v, icon, en, ru, cost, help) => basicBtn(v, icon + ' ' + tr(en, ru), cost, myTurn, ec, strict, help);
+      if (kind === 'self') {
+        h += '<h4>🏃 ' + tr('Actions anyone can take', 'Обычные действия') + '</h4><div class="tc-acts">' +
+          basic('dash', '🏃', 'Dash', 'Рывок', 'a', tr('Double movement this turn', 'Двойное движение в этом ходу')) + basic('dodge', '🛡', 'Dodge', 'Уклонение', 'a', tr('Attacks against you: Disadvantage', 'Атаки по тебе с помехой')) +
+          basic('disengage', '🚪', 'Disengage', 'Отход', 'a', tr('Walk away with no opportunity attacks', 'Уходишь без провоцированных атак')) + basic('hide', '🫥', 'Hide', 'Спрятаться', 'a', tr('Stealth vs 15', 'Скрытность против 15')) +
+          (hero.rogue ? basic('dash', '🏃', 'Dash (bonus)', 'Рывок (бонус)', 'b', tr('Cunning Action', 'Хитрое действие')) + basic('disengage', '🚪', 'Disengage (bonus)', 'Отход (бонус)', 'b', tr('Cunning Action', 'Хитрое действие')) + basic('hide', '🫥', 'Hide (bonus)', 'Спрятаться (бонус)', 'b', tr('Cunning Action', 'Хитрое действие')) : '') + '</div>';
+        const other = (hero.acts || []).filter(a => a.tk === 'n');
+        if (other.length) h += '<h4>✨ ' + tr('Other magic (no target)', 'Прочая магия (без цели)') + '</h4><div class="tc-acts">' + other.map(a => actBtn(a, 'self', 0, myTurn, ec, strict)).join('') + '</div>';
+        if (myTurn) h += '<div class="tc-row"><button class="primary" data-do="end">⏭ ' + tr('End my turn', 'Закончить ход') + '</button></div>';
+      }
+      if (kind === 'ally') h += '<div class="tc-acts">' + basic('help', '🤝', 'Help', 'Помощь', 'a', tr('Their next attack or check: Advantage', 'Его следующая атака или проверка — с преимуществом')) + '</div>';
+      if (kind === 'enemy') h += '<h4>✊ ' + tr('Wrestle', 'Борьба') + '</h4><div class="tc-acts">' + basic('grapple', '✊', 'Grapple', 'Захват', 'a', tr('Within 5 ft. Fail → Grappled', 'Вплотную (5 фт). Провал → Схвачен')) + basic('shove', '💢', 'Shove', 'Толкнуть', 'a', tr('Within 5 ft. Fail → Prone', 'Вплотную (5 фт). Провал → Сбит с ног')) + '</div>';
+      return h;
     }
-    function monCard(lk) {
-      const e = monEntry(lk);
-      if (!e) return head('', lk.n || '?', tr('not in the fight now', 'сейчас не в бою')) + (DM ? '<div class="tc-row"><button data-do="unlink">✂️ ' + tr('Unlink', 'Отвязать') + '</button></div>' : '');
-      if (DM) {
-        return head('', e.name, (e.cr ? tr('CR', 'ПО') + ' ' + esc(e.cr) + ' · ' : '') + tr('AC', 'КД') + ' ' + esc(e.ac)) + bar(e.hp, e.hpMax) + '<div class="tc-sub">❤️ ' + e.hp + ' / ' + e.hpMax + '</div>' + conds(e.conditions) +
-          '<div class="tc-row"><input type="number" min="0" id="amt" placeholder="0"><button data-do="dmg">− ' + tr('Damage', 'Урон') + '</button><button data-do="heal">+ ' + tr('Heal', 'Лечить') + '</button></div>' +
-          '<div class="tc-row"><button data-do="target">🎯 ' + tr('Target of the active one', 'Цель того, кто ходит') + '</button><button data-do="unlink">✂️</button></div>';
+    // can it be done now? → '' (yes) or the reason
+    function why(a, kind, ft, myTurn, ec) {
+      if (a.left === 0) return a.lvl ? tr('no spell slots left', 'нет ячеек заклинаний') : tr('no uses left', 'заряды кончились');
+      if (myTurn) { if (a.cost !== '-' && ec[a.cost]) return tr('already used this turn', 'уже потрачено в этом ходу') + ' (' + COST[a.cost][0] + ')'; }
+      else if (!(a.cost === 'r' || (a.k === 'weapon' && kind === 'enemy')) || ec.r) return tr('not your turn', 'не твой ход');
+      const r = a.rng;
+      if (r && ft != null && kind !== 'self' && kind !== 'point') {
+        if (r.k === 'melee' && ft > r.n) return tr('too far', 'далеко') + ': ' + ft + ' ' + tr('ft', 'фт') + ' — ' + tr('walk', 'подойди ещё на') + ' ' + (ft - r.n) + ' ' + tr('ft closer', 'фт');
+        if (r.k === 'ranged' && ft > r.l) return tr('too far even for a long shot', 'слишком далеко даже для дальнего выстрела') + ' (' + ft + ' > ' + r.l + ')';
+        if (r.k === 'spell' && ft > r.n) return tr('too far for the spell', 'далеко для заклинания') + ': ' + ft + ' > ' + r.n + ' ' + tr('ft', 'фт');
       }
-      const s = ST[e.st] || ST.ok;
-      let out = head('', e.n, s[2] + ' ' + (ruOn() ? s[1] : s[0])) + conds(e.cond);
-      const f = fightPub(); const menu = get('obrmenu', []); const mine = new Set(menu.map(m => m.cid));
-      const meIn = f && f.on && (f.list || []).find(x => x.cid && mine.has(x.cid));
-      const actor = meIn ? menu.find(m => m.cid === meIn.cid) : null;
-      if (!f || !f.on) out += '<p class="tc-msg">' + tr('No fight right now.', 'Сейчас боя нет.') + '</p>';
-      else if (!actor) out += '<p class="tc-msg">' + tr('Your hero is not in this fight.', 'Твоего героя нет в этом бою.') + '</p>';
-      else {
-        const myTurn = f.list[f.turn] && f.list[f.turn].cid === actor.cid;
-        const ec = meIn.ec || { a: 0, b: 0, r: 0 };
-        const can = a => myTurn ? (a.cost === '-' || !ec[a.cost]) : ((a.cost === 'r' || a.k === 'weapon') && !ec.r);
-        const CN = { a: tr('Action', 'Действие'), b: tr('Bonus', 'Бонусное'), r: tr('Reaction', 'Реакция'), '-': tr('free', 'бесплатно') };
-        const costTxt = a => !myTurn && a.k === 'weapon' ? '🛡 ' + tr('opportunity attack', 'провоцированная атака') : ({ a: '🗡', b: '⚡', r: '🛡', '-': '' }[a.cost] || '') + ' ' + (CN[a.cost] || '');
-        out += '<h4>⚔️ ' + esc(actor.n) + ' → ' + esc(e.n) + (myTurn ? '' : ' <small>(' + tr('not your turn: reactions only', 'не твой ход: только реакция') + ')</small>') + '</h4>' +
-          '<div class="tc-row tc-mode">' + [['normal', tr('Normal', 'Обычно')], ['adv', '⬆ ' + tr('Advantage', 'Преимущество')], ['dis', '⬇ ' + tr('Disadvantage', 'Помеха')]].map(m => '<button data-mode="' + m[0] + '" class="' + (mode === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>' +
-          '<div class="tc-acts">' + actor.acts.filter(a => !a.heal).map(a => '<button data-act="' + esc(a.id) + '" data-cid="' + esc(actor.cid) + '"' + (can(a) ? '' : ' disabled') + '><b>' + esc(a.n) + '</b><small>' + esc(a.info) + ' · ' + costTxt(a) + '</small></button>').join('') + '</div>';
-      }
-      return out;
+      if (kind === 'point' && a.area && a.area.o === 'p' && r && ft != null && ft > r.n) return tr('the spot is too far', 'точка слишком далеко') + ': ' + ft + ' > ' + r.n + ' ' + tr('ft', 'фт');
+      return '';
+    }
+    function hintOf(a, kind, ft) {
+      const r = a.rng; const out = [];
+      if (r && ft != null && kind === 'enemy' && r.k === 'ranged') { if (ft > r.n && ft <= r.l) out.push('⬇ ' + tr('long range: Disadvantage', 'дальний выстрел: помеха')); }
+      if (a.area) out.push((a.area.o === 'u' ? tr('around you', 'вокруг тебя') : '') + ' ' + shapeName(a.area));
+      if (a.m > 1) out.push(tr('up to', 'до') + ' ' + a.m + ' ' + tr('targets', 'целей'));
+      if (a.left != null) out.push(tr('left', 'осталось') + ': ' + a.left);
+      return out.join(' · ');
+    }
+    const shapeName = ar => ({ sphere: tr('sphere', 'сфера'), cylinder: tr('cylinder', 'цилиндр'), cube: tr('cube', 'куб'), square: tr('square', 'квадрат'), cone: tr('cone', 'конус'), line: tr('line', 'линия'), aura: tr('aura', 'аура') }[ar.s] || ar.s) + ' ' + ar.n + ' ' + tr('ft', 'фт');
+    function actBtn(a, kind, ft, myTurn, ec, strict) {
+      const w = why(a, kind, ft, myTurn, ec); const off = !!w && strict;
+      const cost = !myTurn && a.k === 'weapon' && kind === 'enemy' ? '🛡 ' + tr('opportunity attack', 'провоцированная атака') : COST[a.cost] ? COST[a.cost][0] + ' ' + tr(COST[a.cost][1], COST[a.cost][2]) : '';
+      const hint = hintOf(a, kind, ft);
+      return '<button data-act="' + esc(a.id) + '"' + (off ? ' disabled' : '') + ' title="' + esc(a.desc || '') + '"><b>' + esc(a.n) + (a.heal ? ' ❤️' : '') + (a.conc ? ' 🧠' : '') + '</b><small>' + esc(a.info || '') + (cost ? ' · ' + cost : '') + '</small>' +
+        (hint ? '<small>' + esc(hint) + '</small>' : '') + (w ? '<small class="' + (strict ? 'tc-no' : 'tc-warn') + '">' + (strict ? '⛔ ' : '⚠️ ') + esc(w) + '</small>' : '') + '</button>';
+    }
+    function basicBtn(v, label, cost, myTurn, ec, strict, help) {
+      const ft = lastCtx && lastCtx.ft; let w = !myTurn ? tr('not your turn', 'не твой ход') : ec[cost] ? tr('already used this turn', 'уже потрачено в этом ходу') : '';
+      if (!w && (v === 'grapple' || v === 'shove') && ft != null && ft > 5) w = tr('too far', 'далеко') + ': ' + ft + ' ' + tr('ft', 'фт');
+      return '<button data-basic="' + v + '" data-cost="' + cost + '"' + (w && strict ? ' disabled' : '') + ' title="' + esc(help || '') + '"><b>' + esc(label) + '</b><small>' + COST[cost][0] + ' ' + tr(COST[cost][1], COST[cost][2]) + (help ? ' · ' + esc(help) : '') + '</small>' + (w ? '<small class="' + (strict ? 'tc-no' : 'tc-warn') + '">' + esc(w) + '</small>' : '') + '</button>';
+    }
+
+    // several targets (Bless, Magic Missile): tick who
+    async function multiView() {
+      const { f, meIn, toks, myB } = lastCtx; const a = view.multi;
+      const side = a.tk === 'e' ? 'mon' : a.tk === 'a' ? 'pc' : '';
+      const alive = x => x.k === 'pc' ? x.hp > 0 || a.heal : x.st !== 'down';
+      const cands = []; for (const x of (f.list || [])) { if (side && x.k !== side) continue; if (!alive(x)) continue; const t = tokenOfEntry(toks, x); const ftx = t ? (x.cid === meIn.cid ? 0 : await feet(myB, await boundsOf(t))) : null; cands.push({ x, ft: ftx }); }
+      if (!view.picked) view.picked = lastCtx.tEntry ? [lastCtx.tEntry.id] : [];
+      const r = a.rng;
+      let h = head('', a.n, tr('Choose up to', 'Выбери до') + ' ' + a.m + ' ' + tr('targets', 'целей') + (a.count > 1 ? '' : ''));
+      h += '<div class="tc-link">' + cands.map(c => { const far = r && c.ft != null && c.ft > r.n; const on = view.picked.includes(c.x.id);
+        return '<label class="tc-pick' + (far ? ' far' : '') + '"><input type="checkbox" data-pick="' + esc(c.x.id) + '"' + (on ? ' checked' : '') + '> ' + esc(c.x.n) + (c.x.cid === meIn.cid ? ' (' + tr('you', 'ты') + ')' : '') + (c.ft != null ? ' <small>📏 ' + c.ft + ' ' + tr('ft', 'фт') + (far ? ' — ' + tr('too far', 'далеко') : '') + '</small>' : '') + '</label>'; }).join('') + '</div>';
+      h += '<div class="tc-row"><button class="primary" data-do="multigo"' + (view.picked.length ? '' : ' disabled') + '>✨ ' + tr('Cast', 'Применить') + ' (' + view.picked.length + '/' + a.m + ')</button><button data-do="back">↩ ' + tr('Back', 'Назад') + '</button></div>';
+      return h;
+    }
+    // an area: preview on the map + who is inside (tick off whom to spare for "creatures of your choice")
+    async function areaView() {
+      const { f, meIn, toks, myB } = lastCtx; const a = view.area; const ar = a.area;
+      if (!myB) return head('', a.n, '') + '<p class="tc-msg">' + tr('Put your token on the map first (the DM links it).', 'Сначала поставь свой токен на карту (мастер привяжет его).') + '</p><div class="tc-row"><button data-do="back">↩ ' + tr('Back', 'Назад') + '</button></div>';
+      const aim = get('obrAim', null); const pt = (aim && aim.point) || view.pt || point || (lastCtx.tb && lastCtx.tb.center) || null;
+      if (ar.o !== 'u' && !pt) return head('', a.n, '') + '<p class="tc-msg">' + tr('Click a spot on the map with the ⚔️ D&D tool.', 'Кликни по точке на карте инструментом ⚔️ D&D.') + '</p>';
+      const origin = ar.o === 'p' ? pt : myB.center; const toward = ar.o === 's' ? pt : null;
+      const Pg = shapePoly(ar, origin, toward, ar.o === 'p' ? null : myB); await drawPreview(Pg);
+      const inside = [];
+      for (const x of (f.list || [])) { if (ar.o !== 'p' && x.cid === meIn.cid) continue; const t = tokenOfEntry(toks, x); if (!t) continue; const b = await boundsOf(t); if (b && tokenIn(b, Pg)) inside.push(x); } // the caster is never inside his own cone / aura
+      const isHeal = !!a.heal;
+      if (!view.picked || view.ptKey !== JSON.stringify(pt)) { view.ptKey = JSON.stringify(pt); view.picked = inside.filter(x => isHeal ? x.k === 'pc' : !(ar.o === 'u' && x.k === 'pc')).map(x => x.id); }
+      const ft = ar.o === 'p' ? await feetTo(myB, pt) : null; const far = a.rng && ft != null && ft > a.rng.n;
+      let h = head('', a.n, shapeName(ar) + (ft != null ? ' · 📏 ' + ft + ' ' + tr('ft', 'фт') : '') + (a.info ? ' · ' + esc(a.info) : ''));
+      h += '<p class="tc-hint">' + (ar.o === 'u' ? tr('Around you. ', 'Вокруг тебя. ') : POP ? tr('Click another spot on the map to move it. ', 'Кликни в другое место на карте, чтобы сдвинуть. ') : '') + tr('Untick whom you spare.', 'Сними галочку с тех, кого щадишь.') + '</p>';
+      if (far) h += '<p class="tc-no">⛔ ' + tr('Too far for this spell', 'Слишком далеко для заклинания') + ': ' + ft + ' > ' + a.rng.n + ' ' + tr('ft', 'фт') + '</p>';
+      h += '<div class="tc-link">' + (inside.length ? inside.map(x => { const ally = x.k === 'pc'; const on = view.picked.includes(x.id);
+        return '<label class="tc-pick' + (ally && !isHeal ? ' ally' : '') + '"><input type="checkbox" data-pick="' + esc(x.id) + '"' + (on ? ' checked' : '') + '> ' + (ally ? (isHeal ? '❤️ ' : '⚠️ ') : '👹 ') + esc(x.n) + (x.cid === meIn.cid ? ' (' + tr('you', 'ты') + ')' : '') + (ally && !isHeal ? ' <small>' + tr('ally!', 'союзник!') + '</small>' : '') + '</label>'; }).join('') : '<p class="tc-msg">' + tr('Nobody inside.', 'Внутри никого.') + '</p>') + '</div>';
+      const strict = f.strict !== false;
+      h += '<div class="tc-row"><button class="primary" data-do="areago"' + (far && strict ? ' disabled' : '') + '>🔥 ' + tr('Cast', 'Применить') + ' (' + view.picked.length + ')</button><button data-do="back">✕ ' + tr('Cancel', 'Отмена') + '</button></div>';
+      view.pt = pt;
+      return h;
+    }
+
+    // ---------- send to the DM ----------
+    async function send(req) {
+      let player = ''; try { player = await OBR.player.getName(); } catch (er) {}
+      const hero = lastCtx && lastCtx.hero;
+      req = Object.assign({ id: Math.random().toString(36).slice(2, 10), t: Date.now(), cid: hero ? hero.cid : '', mode, from: hero ? hero.n : '', player }, req);
+      try { await OBR.broadcast.sendMessage(CH, { type: 'act', req }); note = '⏳ ' + tr('Sent to the DM — the result shows up in the roll log.', 'Отправлено мастеру — результат появится в журнале бросков.'); }
+      catch (er) { note = '⚠️ ' + esc(er.message || er); }
+      mode = 'normal'; view = null; set('obrAim', null); await clearPreview(); render();
+      if (POP) setTimeout(() => { try { OBR.popover.close(POP_ID); } catch (e) {} }, 1400);
     }
 
     // ---------- clicks ----------
+    el.addEventListener('change', ev => {
+      const cbx = ev.target.closest('[data-pick]'); if (!cbx || !view) return;
+      const id = cbx.dataset.pick; view.picked = (view.picked || []).filter(x => x !== id); if (cbx.checked) view.picked.push(id);
+      if (view.multi && view.picked.length > view.multi.m) { view.picked.shift(); }
+      render();
+    });
     el.addEventListener('click', async ev => {
       const b = ev.target.closest('button'); if (!b) return; note = '';
-      if (b.dataset.l) { // link
+      if (b.dataset.l) { // DM: link
         const link = b.dataset.l === 'pc' ? { k: 'pc', cid: b.dataset.id, n: b.dataset.n } : { k: 'mon', eid: b.dataset.id, n: b.dataset.n };
         await OBR.scene.items.updateItems([item.id], items => { items.forEach(it => { it.metadata[LINK] = link; }); });
         await load(); render(); return;
       }
       if (b.dataset.mode) { mode = b.dataset.mode; render(); return; }
-      if (b.dataset.act) { // player attacks this monster
-        const lk = linkOf(item); const e = monEntry(lk); if (!e) return;
-        const menu = get('obrmenu', []); const hero = menu.find(m => m.cid === b.dataset.cid) || {};
-        let player = ''; try { player = await OBR.player.getName(); } catch (er) {}
-        const req = { id: Math.random().toString(36).slice(2, 10), t: Date.now(), cid: b.dataset.cid, aid: b.dataset.act, tid: e.id, mode, from: hero.n || '', player };
-        try { await OBR.broadcast.sendMessage(CH, { type: 'act', req }); note = '⏳ ' + tr('Sent to the DM — the result shows up in the roll log.', 'Отправлено мастеру — результат появится в журнале бросков.'); }
-        catch (er) { note = '⚠️ ' + esc(er.message || er); }
-        mode = 'normal'; render(); return;
+      if (b.dataset.act && lastCtx) {
+        const a = (lastCtx.hero.acts || []).find(x => x.id === b.dataset.act); if (!a) return;
+        if (a.area) { view = { area: a, pt: point || null }; if (POP && a.area.o !== 'u') set('obrAim', { t: Date.now(), point: point || (lastCtx.tb && lastCtx.tb.center) || null }); render(); return; }
+        if (a.m > 1 && a.tk !== 's' && a.tk !== 'n') { view = { multi: a }; render(); return; }
+        const tid = lastCtx.kind === 'self' || a.tk === 's' || a.tk === 'n' ? (a.tk === 'n' ? '' : lastCtx.meIn.id) : lastCtx.tEntry ? lastCtx.tEntry.id : '';
+        send({ aid: a.id, tid }); return;
       }
+      if (b.dataset.basic && lastCtx) { send({ kind: 'basic', basic: b.dataset.basic, bonus: b.dataset.cost === 'b', tid: lastCtx.tEntry && lastCtx.kind !== 'self' ? lastCtx.tEntry.id : '' }); return; }
       const d = b.dataset.do; const lk = linkOf(item);
+      if (d === 'close') { await clearPreview(); set('obrAim', null); try { await OBR.popover.close(POP_ID); } catch (e) {} return; }
+      if (d === 'back') { view = null; set('obrAim', null); await clearPreview(); render(); return; }
+      if (d === 'multigo' && view && view.multi) { send({ aid: view.multi.id, tids: view.picked.slice(0, view.multi.m), tid: view.picked[0] }); return; }
+      if (d === 'areago' && view && view.area) { send({ aid: view.area.id, tids: view.picked.slice(), area: { point: view.pt || (lastCtx.myB && lastCtx.myB.center), o: view.area.area.o } }); return; }
+      if (d === 'end') { send({ kind: 'end' }); return; }
       if (d === 'unlink') { await OBR.scene.items.updateItems([item.id], items => { items.forEach(it => { delete it.metadata[LINK]; }); }); await load(); render(); return; }
-      if (d === 'sheet') { set('view', 'sheet'); set('charId', b.dataset.id); try { await OBR.action.open(); } catch (er) {} note = tr('Opened in the D&D Table panel.', 'Открыто в панели D&D Table.'); render(); return; }
+      if (d === 'sheet' || d === 'openmon') { // the panel (online.js) opens the hero's sheet / the monster's stat block
+        set('obrOpen', d === 'sheet' ? { k: 'hero', id: b.dataset.id, t: Date.now() } : { k: 'mon', n: b.dataset.n, eid: (monEntry(lk) || {}).id || '', t: Date.now() });
+        try { await OBR.action.open(); } catch (er) {} note = tr('Opened in the D&D Table panel.', 'Открыто в панели D&D Table.'); render(); return;
+      }
       if (DM && (d === 'dmg' || d === 'heal')) {
         const n = Math.max(0, Number((document.getElementById('amt') || {}).value) || 0); if (!n) return;
         const cb = combat(); const e = cb && cb.list.find(x => x.id === (monEntry(lk) || {}).id); if (!e) return;
@@ -133,12 +360,20 @@ export function startCard(OBR) {
         note = '🎯 ' + tr('Target set for', 'Цель выбрана для') + ' ' + esc(active.name || ''); render(); return;
       }
     });
+    document.addEventListener('keydown', async e => { if (e.key === 'Escape' && view) { view = null; set('obrAim', null); await clearPreview(); render(); } });
+    window.addEventListener('pagehide', () => { clearPreview(); });
 
     // ---------- keep it fresh ----------
     let lastSel = '';
-    OBR.player.onChange(async p => { const s = JSON.stringify(p.selection || []); if (s !== lastSel) { lastSel = s; note = ''; await load(); render(); } });
-    try { OBR.scene.items.onChange(async () => { await load(); render(); }); } catch (e) {}
-    window.addEventListener('storage', () => render());
+    if (!POP) OBR.player.onChange(async p => { const s = JSON.stringify(p.selection || []); if (s !== lastSel) { lastSel = s; note = ''; view = null; await clearPreview(); await load(); render(); } });
+    let tT = 0; const soon = () => { clearTimeout(tT); tT = setTimeout(async () => { await load(); render(); }, 120); };
+    try { OBR.scene.items.onChange(() => soon()); } catch (e) {}
+    window.addEventListener('storage', e => {
+      const k = e.key || '';
+      if (POP && k === P + 'obrPop') { view = null; note = ''; clearPreview(); soon(); return; } // a new click with the tool
+      if (k === P + 'obrAim' && view && view.area) { soon(); return; } // the area moved
+      if (/obrstate|obrdm|obrmenu|combat|chars/.test(k)) soon();
+    });
     await load(); render();
   });
 }
