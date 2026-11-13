@@ -189,15 +189,16 @@
       const k = JSON.stringify(want); if (k === tagKey) return; tagKey = k;
       const old = await OBR.scene.items.getItems(it => it.metadata && it.metadata[TAG]);
       const byTok = {}; old.forEach(it => { byTok[it.metadata[TAG]] = it; });
-      const gone = old.filter(it => !want[it.metadata[TAG]]).map(it => it.id); if (gone.length) await OBR.scene.items.deleteItems(gone);
-      const change = old.filter(it => want[it.metadata[TAG]] && (it.text || {}).plainText !== want[it.metadata[TAG]]).map(it => it.id);
+      const gone = old.filter(it => !want[it.metadata[TAG]] || it.metadata['dndtable/tagv'] !== 2).map(it => it.id); if (gone.length) await OBR.scene.items.deleteItems(gone); // v2: below the token
+      gone.forEach(id => { const o = old.find(x => x.id === id); if (o) delete byTok[o.metadata[TAG]]; });
+      const change = old.filter(it => !gone.includes(it.id) && want[it.metadata[TAG]] && (it.text || {}).plainText !== want[it.metadata[TAG]]).map(it => it.id);
       if (change.length) await OBR.scene.items.updateItems(change, L => { L.forEach(it => { it.text.plainText = want[it.metadata[TAG]]; }); });
       const add = [];
       for (const tk of toks) {
         if (!want[tk.id] || byTok[tk.id]) continue;
         const b = await OBR.scene.items.getItemBounds([tk.id]);
-        add.push(window.OBR_SDK.buildLabel().plainText(want[tk.id]).position({ x: b.center.x, y: b.center.y + b.height / 2 }).attachedTo(tk.id).layer('ATTACHMENT')
-          .locked(true).disableHit(true).backgroundOpacity(0.75).fontSize(18).pointerHeight(0).metadata({ [TAG]: tk.id }).build());
+        add.push(window.OBR_SDK.buildLabel().plainText(want[tk.id]).position({ x: b.center.x, y: b.center.y + b.height / 2 + 6 }).attachedTo(tk.id).layer('ATTACHMENT').pointerDirection('UP')
+          .locked(true).disableHit(true).backgroundOpacity(0.45).fontSize(15).pointerHeight(0).pointerWidth(0).metadata({ [TAG]: tk.id, 'dndtable/tagv': 2 }).build());
       }
       if (add.length) await OBR.scene.items.addItems(add);
     } catch (e) { console.warn('token tags', e); }

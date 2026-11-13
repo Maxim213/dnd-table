@@ -202,7 +202,7 @@ export function startCard(OBR, opts) {
         ['a', 'b', 'r'].map(k => '<span class="tc-ec' + (ec[k] ? ' used' : '') + '">' + COST[k][0] + '</span>').join('') +
         ' · 🚶 ' + tr('left', 'осталось') + ' ' + left + ' ' + tr('ft', 'фт') + (strict ? '' : ' · 🕊 ' + tr('free rules', 'свободные правила')) + '</div>';
       if (kind === 'self') h += '<div class="tc-move">🚶 ' + (myTurn ? tr('You can still walk', 'Можно пройти ещё') + ' <b>' + left + ' ' + tr('ft', 'фт') + '</b> (' + Math.floor(left / G.mult) + ' ' + tr('squares', 'клет.') + ') ' + tr('of', 'из') + ' ' + mvMax + '.<br><small>' +
-        tr('The green square on the map = where you can get. Drag your token with the ⚔️ D&D tool — the line shows what it costs. Or click the floor → «Walk here».', 'Зелёный квадрат на карте — куда можешь дойти. Тяни свой токен инструментом ⚔️ D&D — линия покажет, сколько потратишь. Или кликни по полу → «Идти сюда».') + '</small>'
+        tr('Hold your token with the ⚔️ D&D tool and drag: a green zone shows where you can get, the line shows what it costs. Or click the floor → «Walk here».', 'Зажми свой токен инструментом ⚔️ D&D и тяни: зелёная зона покажет, куда можешь дойти, линия — сколько потратишь. Или кликни по полу → «Идти сюда».') + '</small>'
         : tr('You walk on your turn: speed', 'Ходить можно в свой ход: скорость') + ' ' + (hero.speed || 30) + ' ' + tr('ft', 'фт')) + '</div>';
       // which actions fit what was clicked
       const acts = hero.acts || [];

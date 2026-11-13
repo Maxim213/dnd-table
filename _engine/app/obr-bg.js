@@ -270,6 +270,8 @@ export function startBackground(OBR, by) {
       let left = null;
       if (!DM && strict && e) { const myTurn = st.list[st.turn] && st.list[st.turn].id === e.id; left = myTurn ? Math.max(0, (e.mvMax || 30) - (e.mv || 0)) : 0; if (!myTurn) say(tr('Not your turn — you cannot move now.', 'Сейчас не твой ход — двигаться нельзя.'), 'WARNING'); }
       drag = { id: it.id, start: it.position, pos: it.position, off: { x: it.position.x - ev.pointerPosition.x, y: it.position.y - ev.pointerPosition.y }, left, ft: 0 };
+      reachWant = null;
+      if (left != null) { try { const b = await OBR.scene.items.getItemBounds([it.id]); reachWant = { c: b.center, w: Math.max(b.width, b.height), left }; drawReach(); } catch (e) {} }
       try { const [update, stop] = await OBR.interaction.startItemInteraction(it); if (drag && drag.id === it.id) { drag.update = update; drag.stop = stop; } else stop(); } catch (er) { console.warn('interaction', er); }
     }
     let rulerIds = null;
@@ -300,35 +302,35 @@ export function startBackground(OBR, by) {
     async function dragEnd() {
       const d = drag; drag = null; if (!d) return;
       try { if (d.stop) d.stop(); } catch (e) {}
-      await clearRuler();
+      await clearRuler(); reachWant = null; drawReach();
       if (!d.pos || (d.pos.x === d.start.x && d.pos.y === d.start.y)) return;
       if (d.left != null && d.ft > d.left) { say(d.left ? tr('Too far: you have {0} ft of movement left.', 'Слишком далеко: осталось {0} фт движения.').replace('{0}', d.left) : tr('No movement left (or not your turn).', 'Движения не осталось (или сейчас не твой ход).'), 'WARNING'); return; }
       try { await OBR.scene.items.updateItems([d.id], L => { L.forEach(x => { x.position = d.pos; }); }); } catch (e) { say(tr('Owlbear did not let you move this token.', 'Owlbear не дал сдвинуть этот токен.'), 'ERROR'); }
     }
-    // ---------- my turn: a green square = where I can still walk (only I see it), "🚶 25 ft" above it ----------
-    var reachKey = '', reachT = 0;
+    // ---------- while I drag my token: where I can still get (only I see it), "🚶 25 ft" above it ----------
+    // Its shape follows the room's grid rule (Owlbear → grid settings → measurement):
+    // Chebyshev (D&D 2024: a diagonal step = 5 ft) → a square · Euclidean → a circle · Manhattan → a diamond · 5-10-5 → an octagon
+    var reachKey = '', reachT = 0, reachWant = null;
     async function drawReach() {
-      if (DM) return;
       try {
-        const st = get('obrstate', null); const mine = new Set(get('chars', []).map(c => c.id));
-        const a = st && st.on && st.list && st.list[st.turn];
-        let want = null;
-        if (a && a.cid && mine.has(a.cid) && st.strict !== false) {
-          const toks = await OBR.scene.items.getItems(it => it.layer === 'CHARACTER' && !!(it.metadata && it.metadata[LINK]) && it.metadata[LINK].k === 'pc' && it.metadata[LINK].cid === a.cid);
-          if (toks[0]) { await gridInfo(); const b = await OBR.scene.items.getItemBounds([toks[0].id]); want = { c: b.center, w: Math.max(b.width, b.height), left: Math.max(0, (a.mvMax || 30) - (a.mv || 0)) }; }
-        }
+        const want = drag && reachWant ? reachWant : null;
         const k = JSON.stringify(want); if (k === reachKey) return; reachKey = k;
         const old = await OBR.scene.local.getItems(it => it.metadata && it.metadata['dndtable/reach']); if (old.length) await OBR.scene.local.deleteItems(old.map(x => x.id));
         const B = window.OBR_SDK; if (!want || !B || !B.buildCurve) return;
-        const half = want.w / 2 + Math.floor(want.left / G.mult) * G.dpi;
-        const sq = B.buildCurve().points([{ x: -half, y: -half }, { x: half, y: -half }, { x: half, y: half }, { x: -half, y: half }]).position(want.c).fillColor('#5cb85c').fillOpacity(0.1).strokeColor('#7bd389').strokeWidth(4).strokeOpacity(0.85).strokeDash([18, 10]).tension(0).closed(true).layer('DRAWING').locked(true).disableHit(true).metadata({ 'dndtable/reach': 1 }).build();
-        const lab = B.buildLabel().plainText('🚶 ' + tr('you can walk', 'можно пройти') + ' ' + want.left + ' ' + tr('ft', 'фт')).position({ x: want.c.x, y: want.c.y - half }).layer('DRAWING').locked(true).disableHit(true).backgroundOpacity(0.85).fontSize(22).metadata({ 'dndtable/reach': 2 }).build();
-        await OBR.scene.local.addItems([sq, lab]);
+        let meas = 'CHEBYSHEV'; try { meas = (await OBR.scene.grid.getMeasurement()) || meas; } catch (e) {}
+        const cells = Math.floor(want.left / G.mult); const R = want.w / 2 + cells * G.dpi; let pts;
+        if (meas === 'EUCLIDEAN') { pts = []; for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; pts.push({ x: Math.cos(a) * R, y: Math.sin(a) * R }); } }
+        else if (meas === 'MANHATTAN') pts = [{ x: 0, y: -R }, { x: R, y: 0 }, { x: 0, y: R }, { x: -R, y: 0 }];
+        else if (meas === 'ALTERNATING') { const D = want.w / 2 + Math.floor(cells * 2 / 3) * G.dpi; pts = [{ x: R, y: 0 }, { x: D, y: D }, { x: 0, y: R }, { x: -D, y: D }, { x: -R, y: 0 }, { x: -D, y: -D }, { x: 0, y: -R }, { x: D, y: -D }]; }
+        else pts = [{ x: -R, y: -R }, { x: R, y: -R }, { x: R, y: R }, { x: -R, y: R }];
+        const sh = B.buildCurve().points(pts).position(want.c).fillColor('#5cb85c').fillOpacity(0.08).strokeColor('#7bd389').strokeWidth(3).strokeOpacity(0.7).strokeDash([18, 10]).tension(0).closed(true).layer('DRAWING').locked(true).disableHit(true).metadata({ 'dndtable/reach': 1 }).build();
+        const top = Math.min(...pts.map(p => p.y));
+        const lab = B.buildLabel().plainText('🚶 ' + tr('you can walk', 'можно пройти') + ' ' + want.left + ' ' + tr('ft', 'фт')).position({ x: want.c.x, y: want.c.y + top }).layer('DRAWING').locked(true).disableHit(true).backgroundOpacity(0.6).fontSize(20).metadata({ 'dndtable/reach': 2 }).build();
+        await OBR.scene.local.addItems([sh, lab]);
       } catch (e) { console.warn('reach', e); }
     }
-    function drawReachSoon() { clearTimeout(reachT); reachT = setTimeout(drawReach, 250); }
-    if (!DM) { try { OBR.scene.items.onChange(() => drawReachSoon()); } catch (e) {} drawReachSoon(); }
-    async function dragCancel() { const d = drag; drag = null; if (d && d.stop) try { d.stop(); } catch (e) {} await clearRuler(); }
+    function drawReachSoon() { clearTimeout(reachT); reachT = setTimeout(drawReach, 150); }
+    async function dragCancel() { const d = drag; drag = null; if (d && d.stop) try { d.stop(); } catch (e) {} await clearRuler(); reachWant = null; drawReach(); }
     try {
       await OBR.tool.create({ id: TOOL, icons: [{ icon: ICON, label: tr('D&D: actions and movement', 'D&D: действия и ход') }], defaultMode: MODE, shortcut: 'Y' });
       await OBR.tool.createMode({
