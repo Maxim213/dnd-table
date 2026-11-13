@@ -175,6 +175,7 @@ export function startBackground(OBR, by) {
       if (m.type === 'log') takeLog(m);
       else if (m.type === 'heroSet') takeHero(m);
       else if (m.type === 'act' && DM && m.req) takeAct(m.req);
+      else if (m.type === 'note' && m.to === OBR.player.id && m.text) { try { OBR.notification.show(String(m.text).slice(0, 160), 'WARNING'); } catch (e) {} }
     });
     if (DM) {
       OBR.party.onChange(players => mergeHeroes(players));

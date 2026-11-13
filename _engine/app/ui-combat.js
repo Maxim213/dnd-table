@@ -151,7 +151,7 @@
 const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (players need them too)
 
   function startTurn(cb) {
-    cb.econ = U.econNew(); // a new turn: action, bonus action and reaction are back
+    cb.econ = U.econNew(); cb.move = { ft: 0 }; // a new turn: action, bonus action, reaction and movement are back
     const v = cbView(cb); if (!v) return;
     const ended = U.tickConds(v.holder); const lines = [];
     if (ended.length) lines.push(T('no longer {0}', ended.map(x => esc(t(x))).join(', ')));
@@ -177,7 +177,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     const parts = [];
     const avg = a.dmg ? Math.round(U.avgExpr(a.dmg, ctx) * (a.count || 1) * (a.mult || 1) + (a.plus ? U.avgExpr(a.plus.d) : 0)) : 0;
     if (a.hit != null) {
-      if (tcb) { const tv = cbView(tcb); const p = U.hitPct(a.hit, tv.ac, S.mode); parts.push(T('{0} to hit vs AC {1}', sign(a.hit), tv.ac) + ' → ' + U.oddsTag(p, T('chance to hit')) + ' ' + T('to hit')); }
+      const tv0 = tcb && cbView(tcb); if (tv0) { const tv = tv0; const p = U.hitPct(a.hit, tv.ac, S.mode); parts.push(T('{0} to hit vs AC {1}', sign(a.hit), tv.ac) + ' → ' + U.oddsTag(p, T('chance to hit')) + ' ' + T('to hit')); }
       else parts.push(T('{0} to hit', sign(a.hit)));
     }
     if (a.save) {
@@ -250,7 +250,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
         '<p class="hint">' + T('Move · 1 Action · 1 Bonus Action (if it has one) · 1 Reaction per round.') + '</p>' +
         '<label class="blk">' + T('Target') + ' <select data-on="cbTarget" data-id="' + active.id + '">' + opt('', T('— nobody (just roll) —'), tgt) +
         (hasArea ? opt('__all', active.type === 'pc' ? T('⚡ All monsters (area — saves only)') : T('⚡ All characters (area — saves only)'), tgt) : '') +
-        allT.filter(x => x.id !== active.id).map(x => { const tv = cbView(x); return opt(x.id, tv.name + ' (' + T('AC') + ' ' + tv.ac + ', ' + tv.hp + ' ' + T('HP') + ')', tgt); }).join('') + opt(active.id, T('Self'), tgt) + '</select></label>' +
+        allT.filter(x => x.id !== active.id && cbView(x)).map(x => { const tv = cbView(x); return opt(x.id, tv.name + ' (' + T('AC') + ' ' + tv.ac + ', ' + tv.hp + ' ' + T('HP') + ')', tgt); }).join('') + opt(active.id, T('Self'), tgt) + '</select></label>' +
         '<p class="hint">' + T('Each button shows the chance to hit (or that the target fails its save) and the average damage ≈.') + ' ' + ib('hitchance') + ' ' + ib('savechance') + '</p>';
       h += U.econChips(active.econ) + '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + '"' + (a.blocked ? ' disabled' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
         oddsLine(a, active, tcb, enemies, ctx) + '</small></button>').join('') + '</div>';
@@ -422,9 +422,9 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     cbStart: () => {
       if (!S.combat.list.length) { U.toast(T('Add someone first.')); return; }
       if (S.combat.list.some(x => x.init == null || x.init === '')) U.ACT.cbRollInit();
-      sortCombat(); S.combat.round = 1; S.combat.turn = 0; S.combat.list.forEach(x => { x.econ = U.econNew(); });
+      sortCombat(); S.combat.round = 1; S.combat.turn = 0; S.combat.list.forEach(x => { x.econ = U.econNew(); x.move = { ft: 0 }; });
       while (S.combat.turn < S.combat.list.length - 1 && isOut(S.combat.list[S.combat.turn])) S.combat.turn++;
-      U.saveCombat(); U.logAdd(T('Combat'), ['⚔️ ' + T('Round 1 begins. {0} goes first.', esc(cbView(S.combat.list[S.combat.turn]).name))]); U.render();
+      U.saveCombat(); U.logAdd(T('Combat'), ['⚔️ ' + T('Round 1 begins. {0} goes first.', esc((cbView(S.combat.list[S.combat.turn]) || {}).name || '?'))]); U.render();
     },
     cbNext: () => {
       const L = S.combat.list; if (!L.length) return; let tt = S.combat.turn; let guard = 0;

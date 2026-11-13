@@ -540,3 +540,6 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 .actb small.cost { display: block; color: var(--gold); font-size: 11px; }
 .actb:disabled { opacity: .4; }
 .modepick .mini.on { border-color: var(--gold); background: #3d3122; color: var(--gold2); }
+.obract .move { margin: 2px 0; }
+.obract .basics .mini { margin-right: 4px; }
+#side .dist, .log .dist { display: inline-block; font-size: 11px; color: #9ec7ff; margin-right: 6px; }

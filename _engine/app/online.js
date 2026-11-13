@@ -90,7 +90,7 @@
       if (x.type === 'pc') {
         const c = U.byId(x.charId); if (!c) return { id: x.id, n: '?', k: 'pc' };
         let d = null; try { d = E.compute(c); } catch (e) {}
-        return { id: x.id, n: c.name || T('Unnamed'), k: 'pc', cid: c.id, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, sp: d ? d.speed : 0, init: x.init, cond: (c.conditions || []).slice(0, 6), ec: x.econ || { a: 0, b: 0, r: 0 }, pic: priv ? c.portraitThumb || '' : undefined };
+        return { id: x.id, n: c.name || T('Unnamed'), k: 'pc', cid: c.id, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, sp: d ? d.speed : 0, mv: (x.move && x.move.ft) || 0, mvMax: (d ? d.speed : 30) * (x.econ && x.econ.dash ? 2 : 1), rogue: c.classKey === 'rogue' && c.level >= 2, init: x.init, cond: (c.conditions || []).slice(0, 6), ec: x.econ || { a: 0, b: 0, r: 0 }, pic: priv ? c.portraitThumb || '' : undefined };
       }
       const m = { id: x.id, n: x.name, k: 'mon', st: health(Number(x.hp) || 0, Number(x.hpMax) || 0), init: x.init, cond: (x.conditions || []).slice(0, 6) };
       if (priv) Object.assign(m, { hp: Number(x.hp) || 0, mx: Number(x.hpMax) || 0, ac: x.ac, cr: x.cr || '' });
@@ -156,14 +156,93 @@
   // rules checked here: only on your own turn (off-turn: reactions only — a weapon attack becomes ONE opportunity attack),
   // each turn 1 action / 1 bonus action / 1 reaction, slots and uses (U.spendFor), "end my turn"
   const refuse = (q, msg) => { U.logAdd(q.from || '?', ['⚠️ ' + msg]); if (S.log[0]) { S.log[0].share = 1; U.saveLog(); } U.render(); return ''; };
-  U.remoteAct = function (q) {
+  const shareLog = () => { if (S.log[0]) { S.log[0].share = 1; U.saveLog(); } };
+
+  // ---------- 3d. distance on the Owlbear map: who is linked to which token, how many feet between them ----------
+  const GRID = { dpi: 150, mult: 5 };
+  async function gridInfo() {
+    try { GRID.dpi = (await OBR.scene.grid.getDpi()) || 150; const s = await OBR.scene.grid.getScale(); const m = s && s.parsed ? Number(s.parsed.multiplier) : NaN; GRID.mult = m > 0 ? m : 5; } catch (e) {}
+  }
+  const linkOfIt = it => (it && it.metadata && it.metadata[LINK]) || null;
+  async function tokenOf(entry) {
+    if (!OBR || !OBR.scene || !entry) return null;
+    try {
+      const L = await OBR.scene.items.getItems(it => { const l = linkOfIt(it); return !!l && (entry.type === 'pc' ? l.k === 'pc' && l.cid === entry.charId : l.k === 'mon' && (l.eid === entry.id || l.n === entry.name)); });
+      return L[0] || null;
+    } catch (e) { return null; }
+  }
+  // feet between two fight entries, edge to edge (big creatures take more squares); null = no tokens on the map
+  async function feetBetween(e1, e2) {
+    const [t1, t2] = [await tokenOf(e1), await tokenOf(e2)]; if (!t1 || !t2) return null;
+    try {
+      await gridInfo();
+      const [b1, b2] = [await OBR.scene.items.getItemBounds([t1.id]), await OBR.scene.items.getItemBounds([t2.id])];
+      const cells = await OBR.scene.grid.getDistance(b1.center, b2.center);
+      const s1 = Math.max(1, Math.round(Math.max(b1.width, b1.height) / GRID.dpi)), s2 = Math.max(1, Math.round(Math.max(b2.width, b2.height) / GRID.dpi));
+      return Math.max(1, Math.round(cells - (s1 - 1) / 2 - (s2 - 1) / 2)) * GRID.mult; // next to each other = 5 ft
+    } catch (e) { return null; }
+  }
+  // how far an action reaches: melee reach, ranged normal/long, spell range (null = not checked)
+  function rangeOf(a) {
+    if (!a) return null;
+    if (a.kind === 'weapon') {
+      if (/beast|зверя/i.test(a.name || '')) return null; // the beast companion strikes from its own place
+      const pr = (a.props || []).join(' '); const m = pr.match(/\((\d+)\s*\/\s*(\d+)\)/);
+      if (a.scope === 'ranged') return m ? { k: 'ranged', n: +m[1], l: +m[2] } : { k: 'ranged', n: 60, l: 60 };
+      return { k: 'melee', n: /\breach\b|досягаем/i.test(pr) ? 10 : 5 };
+    }
+    if (a.kind === 'spell') {
+      const sp = D.SPELLS.find(s => 'sp:' + s.n === a.id); const r = String((sp && sp.r) || '');
+      const n = r.match(/(\d+)\s*(?:ft|фт)/i);
+      if (/touch|касан/i.test(r)) return { k: 'spell', n: 5 };
+      if (/self|себя/i.test(r)) return n ? { k: 'spell', n: +n[1] } : null;
+      return n ? { k: 'spell', n: +n[1] } : null;
+    }
+    return null;
+  }
+  // → { ok, mode, note } — refuse when too far; ranged: long range or an enemy next to you = Disadvantage
+  async function checkRange(q, a, actor) {
+    if (!OBR || !q.tid || q.tid === '__all') return { ok: true, mode: q.mode };
+    const cb = S.combat; const target = cb.list.find(x => x.id === q.tid); const r = rangeOf(a);
+    if (!target || !r || target.id === actor.id) return { ok: true, mode: q.mode };
+    const ft = await feetBetween(actor, target);
+    if (ft == null) return { ok: true, mode: q.mode, note: T('(distance not checked: put both tokens on the map and link them)') };
+    const tn = U.cbTarget(target) ? U.cbTarget(target).name : target.name || '';
+    if (r.k === 'melee' && ft > r.n) return { ok: false, msg: T('Too far: {0} is {1} ft away, you reach {2} ft. Walk closer first.', tn, ft, r.n) };
+    if (r.k === 'spell' && ft > r.n) return { ok: false, msg: T('Too far for this spell: {0} ft, the spell reaches {1} ft.', ft, r.n) };
+    let dis = '';
+    if (r.k === 'ranged') {
+      if (ft > r.l) return { ok: false, msg: T('Too far even for a long shot: {0} ft (max {1} ft).', ft, r.l) };
+      if (ft > r.n) dis = T('long range ({0} ft > {1} ft)', ft, r.n);
+      if (!dis) { // shooting with an enemy right next to you
+        const foes = cb.list.filter(x => x.type === 'mon' && (Number(x.hp) || 0) > 0);
+        for (const f of foes) { const d0 = await feetBetween(actor, f); if (d0 != null && d0 <= 5) { dis = T('an enemy is right next to you'); break; } }
+      }
+    }
+    let mode = q.mode;
+    if (dis) mode = q.mode === 'adv' ? 'normal' : 'dis';
+    return { ok: true, mode, note: '📏 ' + ft + ' ' + T('ft') + (dis ? ' · ' + T('Disadvantage: {0}', dis) : '') };
+  }
+
+  U.remoteAct = async function (q) {
     const cb = S.combat; if (!cb || cb.turn < 0) return T('No fight right now.');
     const ai = cb.list.findIndex(x => x.type === 'pc' && x.charId === q.cid); if (ai < 0) return T('{0} is not in the fight.', q.from || '?');
     const actor = cb.list[ai]; const own = cb.turn === ai;
     if (q.kind === 'end') {
       if (!own) return refuse(q, T('It is not your turn, so there is nothing to end.'));
-      U.logAdd(q.from || '?', ['⏭ ' + T('ends the turn.')]); if (S.log[0]) { S.log[0].share = 1; U.saveLog(); }
+      U.logAdd(q.from || '?', ['⏭ ' + T('ends the turn.')]); shareLog();
       U.ACT.cbNext(); return '';
+    }
+    if (q.kind === 'basic') { // Dash / Dodge / Disengage: an action (a rogue's Cunning Action: bonus action)
+      if (!own) return refuse(q, T('Only on your own turn.'));
+      const ec0 = actor.econ = actor.econ || U.econNew(); const k = q.bonus ? 'b' : 'a';
+      if (ec0[k] >= 1) return refuse(q, T('{0} is already used this turn.', T(U.ECON_NAME[k])));
+      ec0[k]++;
+      const c0 = U.byId(q.cid); const sp0 = c0 ? E.compute(c0).speed : 30;
+      if (q.basic === 'dash') { ec0.dash = true; U.logAdd(q.from, ['🏃 ' + T('Dash: you can move {0} ft this turn.', sp0 * 2)]); }
+      else if (q.basic === 'dodge') { ec0.dodge = true; U.logAdd(q.from, ['🛡 ' + T('Dodge: until your next turn attacks against you have Disadvantage, your DEX saves have Advantage.')]); }
+      else { ec0.disengage = true; U.logAdd(q.from, ['🚪 ' + T('Disengage: moving away provokes no opportunity attacks this turn.')]); }
+      shareLog(); U.saveCombat(); U.render(); return '';
     }
     const c = U.byId(q.cid); let a = null; try { a = c && E.compute(c).actions.find(x => x.id === q.aid); } catch (e) {}
     if (!a) return refuse(q, T('This action is not on the hero any more.'));
@@ -174,21 +253,60 @@
     }
     const ec = actor.econ = actor.econ || U.econNew();
     if (cost !== '-' && ec[cost] >= 1) return refuse(q, T('{0} is already used this turn.', T(U.ECON_NAME[cost])) + (cost === 'r' ? ' ' + T('It comes back at the start of your turn.') : ''));
+    const rg = await checkRange(q, a, actor); // distance on the map
+    if (!rg.ok) return refuse(q, rg.msg);
     const turn0 = cb.turn; const t0 = cb.target[actor.id]; const top = S.log[0];
-    cb.turn = ai; if (q.tid) cb.target[actor.id] = q.tid; S.mode = q.mode === 'adv' || q.mode === 'dis' ? q.mode : 'normal';
+    cb.turn = ai; if (q.tid) cb.target[actor.id] = q.tid; S.mode = rg.mode === 'adv' || rg.mode === 'dis' ? rg.mode : 'normal';
     const toast0 = U.toast; let why = ''; U.toast = h => { why = h; }; // a refusal (no slots / uses) comes as a toast: catch it
     try { U.ACT.cbAct({ aid: q.aid, remote: 1, cost, one }); }
     finally { U.toast = toast0; cb.turn = turn0; if (t0 === undefined) delete cb.target[actor.id]; else cb.target[actor.id] = t0; S.mode = 'normal'; U.saveCombat(); }
     if (!S.log[0] || S.log[0] === top) U.logAdd(q.from || '?', ['⚠️ ' + (why || T('This action did not work.'))]); // tell everyone why nothing happened
-    if (S.log[0] && S.log[0] !== top) { S.log[0].share = 1; S.log[0].html = '<small class="from">🦉 ' + esc(q.player || q.from || '') + '</small>' + S.log[0].html; U.saveLog(); }
+    if (S.log[0] && S.log[0] !== top) { S.log[0].share = 1; S.log[0].html = '<small class="from">🦉 ' + esc(q.player || q.from || '') + '</small>' + (rg.note ? '<small class="dist">' + esc(rg.note) + '</small>' : '') + S.log[0].html; U.saveLog(); }
     U.render(); return '';
   };
-  function runActQueue() {
-    if (!U.DM || !U.game) return;
+  let actBusy = false;
+  async function runActQueue() {
+    if (!U.DM || !U.game || actBusy) return;
     const Q = U.raw.get('obrActQ', []); if (!Q.length) return;
-    U.raw.set('obrActQ', []);
-    Q.filter(q => q && Date.now() - (q.t || 0) < 5 * 60000).forEach(q => { const err = U.remoteAct(q); if (err) U.toast('⚠️ ' + err); });
+    U.raw.set('obrActQ', []); actBusy = true;
+    try { for (const q of Q.filter(x => x && Date.now() - (x.t || 0) < 5 * 60000)) { const err = await U.remoteAct(q); if (err) U.toast('⚠️ ' + err); } }
+    finally { actBusy = false; }
+    if (U.raw.get('obrActQ', []).length) runActQueue(); // more came while we were busy
   }
+
+  // ---------- 3e. movement: in a fight a hero's token moves only on its own turn and not farther than its speed ----------
+  // (the DM can always move any token — his moves are never checked). Too far / not your turn → the token jumps back.
+  let posCache = {}, moveBusy = false;
+  const notifyPlayer = (c, text) => { if (c && c.obr && c.obr.pid) try { OBR.broadcast.sendMessage('dndtable/v1', { type: 'note', to: c.obr.pid, text }); } catch (e) {} };
+  async function watchMoves(items) {
+    if (!U.DM || moveBusy) { (items || []).forEach(it => { if (it.layer === 'CHARACTER') posCache[it.id] = it.position; }); return; }
+    moveBusy = true;
+    try {
+      const cb = S.combat; let me = ''; try { me = OBR.player.id; } catch (e) {}
+      for (const it of items || []) {
+        if (it.layer !== 'CHARACTER') continue;
+        const prev = posCache[it.id], cur = it.position; posCache[it.id] = cur;
+        const l = linkOfIt(it);
+        if (!prev || !cur || (prev.x === cur.x && prev.y === cur.y) || !l || l.k !== 'pc' || !cb || cb.turn < 0) continue;
+        if (it.lastModifiedUserId && it.lastModifiedUserId === me) continue; // the DM moved it
+        const ei = cb.list.findIndex(x => x.type === 'pc' && x.charId === l.cid); if (ei < 0) continue; // not in this fight: free
+        const e = cb.list[ei]; const c = U.byId(l.cid); const name = c ? c.name : l.n;
+        const back = async msg => { posCache[it.id] = prev; await OBR.scene.items.updateItems([it.id], L => { L.forEach(x => { x.position = prev; }); }); notifyPlayer(c, msg); U.toast('🚶 ' + esc(name) + ': ' + msg); };
+        if (ei !== cb.turn) { await back(T('Not your turn — your token went back.')); continue; }
+        await gridInfo();
+        const ft = Math.round((await OBR.scene.grid.getDistance(prev, cur)) * GRID.mult);
+        const speed = c ? E.compute(c).speed : 30; e.econ = e.econ || U.econNew();
+        const max = speed * (e.econ.dash ? 2 : 1); e.move = e.move || { ft: 0 };
+        if (e.move.ft + ft > max) { await back(T('Too far: you have {0} ft of movement left this turn (Dash doubles it).', Math.max(0, max - e.move.ft))); continue; }
+        e.move.ft += ft; U.saveCombat();
+      }
+    } catch (e) { console.warn('moves', e); }
+    finally { moveBusy = false; }
+  }
+  U.obrWatchMoves = async function () {
+    if (!U.DM || !OBR || !OBR.scene || !OBR.scene.items.onChange) return;
+    try { if (!(await OBR.scene.isReady())) return; (await OBR.scene.items.getItems(it => it.layer === 'CHARACTER')).forEach(it => { posCache[it.id] = it.position; }); OBR.scene.items.onChange(watchMoves); } catch (e) { console.warn(e); }
+  };
   U.runActQueue = runActQueue;
 
   // players: what my heroes can do (the token card reads this list too)
@@ -264,7 +382,10 @@
           (myTurn ? '<p class="warn">⚔️ <b>' + T('Your turn!') + '</b> ' + T('1. Click the target in the list above. 2. Click what you do. 3. When you are done — End my turn.') + '</p>'
             : '<p class="hint">⏳ ' + T('Not your turn. You can only react: hit an enemy that runs away from you (opportunity attack) or cast a reaction spell.') + '</p>') +
           '<h3>' + esc(actor.name) + (tgt ? ' → 🎯 ' + esc(tgt.n) : '') + '</h3>' +
-          '<p>' + T('This turn:') + ' ' + U.econChips(ec) + ' <small>· ' + T('Speed {0} ft', (meIn && meIn.sp) || 30) + '</small></p>' +
+          '<p>' + T('This turn:') + ' ' + U.econChips(ec) + '</p>' +
+          '<p class="move">🚶 ' + T('Movement: {0} / {1} ft', (meIn && meIn.mv) || 0, (meIn && meIn.mvMax) || 30) + ' <small>' + T('(move your token on the map; it stops at your speed)') + '</small></p>' +
+          (myTurn ? '<p class="basics">' + [['dash', '🏃 ' + T('Dash')], ['dodge', '🛡 ' + T('Dodge')], ['disengage', '🚪 ' + T('Disengage')]].map(b => '<button class="mini" data-act="obrBasic" data-v="' + b[0] + '" data-cid="' + esc(actor.id) + '"' + (ec.a ? ' disabled' : '') + ' title="' + esc(T(BASIC_HELP[b[0]])) + '">' + b[1] + '</button>').join('') +
+            (meIn && meIn.rogue ? ' <small>' + T('Rogue: the same as a bonus action →') + '</small> ' + [['dash', '🏃'], ['disengage', '🚪']].map(b => '<button class="mini" data-act="obrBasic" data-bonus="1" data-v="' + b[0] + '" data-cid="' + esc(actor.id) + '"' + (ec.b ? ' disabled' : '') + '>' + b[1] + ' ⚡</button>').join('') : '') + '</p>' : '') +
           '<p class="modepick">' + T('Roll:') + ' ' + [['normal', T('Normal')], ['adv', '⬆ ' + T('With advantage')], ['dis', '⬇ ' + T('With disadvantage')]].map(m => '<button class="mini' + (mode === m[0] ? ' on' : '') + '" data-act="obrMode" data-v="' + m[0] + '">' + m[1] + '</button>').join('') +
           ' ' + U.ib('advantage') + '</p>' +
           (menu.acts.some(x => x.area) ? '<p><label class="inl"><input type="checkbox" data-on="obrAll"' + (S.obrAll ? ' checked' : '') + '> 🌋 ' + T('Hit all enemies at once (only for area spells like Fireball)') + '</label></p>' : '') +
@@ -285,6 +406,8 @@
     U.obrSendAct({ cid: ds.cid, aid: ds.aid, tid, mode: S.obrMode || 'normal' }); S.obrMode = 'normal'; U.render();
   };
   U.ACT.obrMode = ds => { S.obrMode = ds.v; U.render(); };
+  const BASIC_HELP = { dash: 'Dash: double your movement this turn. Costs your action.', dodge: 'Dodge: until your next turn attacks against you have Disadvantage. Costs your action.', disengage: 'Disengage: walk away from enemies without opportunity attacks. Costs your action.' };
+  U.ACT.obrBasic = ds => { U.obrSendAct({ kind: 'basic', basic: ds.v, bonus: !!ds.bonus, cid: ds.cid }); };
   U.ACT.obrEnd = ds => { U.obrSendAct({ kind: 'end', cid: ds.cid }); };
   function markFightNav() {
     const b = document.querySelector('[data-v="obrfight"]'); if (!b) return;
@@ -361,6 +484,7 @@
     remember();
     checkSync(); setTimeout(thumbs, 500); // heroes that already have a picture
     saveMenu(); if (U.DM) setTimeout(runActQueue, 1500); // requests that came while the panel was closed
+    if (U.DM) { U.obrWatchMoves(); try { OBR.scene.onReadyChange(r => { if (r) U.obrWatchMoves(); }); } catch (e) {} } // movement rules on the map
     if (U.PLAYER) {
       const nav = document.querySelector('header.top nav');
       if (nav && !nav.querySelector('[data-v="obrfight"]')) nav.insertAdjacentHTML('afterbegin', '<button data-act="nav" data-v="obrfight">⚔️ ' + esc(T('Fight')) + '</button>');
