@@ -132,13 +132,13 @@ export function startBackground(OBR, by) {
     let turnKey = get('obrTurnKey', '');
     const takeState = st => {
       if (DM) return;
-      set('obrstate', st || null);
+      set('obrstate', st || null); drawReachSoon();
       const mine = new Set(get('chars', []).map(c => c.id));
       const a = st && st.on && st.list && st.list[st.turn];
       const key = st && st.on ? st.round + ':' + st.turn : '';
       if (a && a.cid && mine.has(a.cid) && key !== turnKey) {
         turnKey = key; set('obrTurnKey', key);
-        try { OBR.notification.show('⚔️ ' + tr('Your turn!', 'Твой ход!') + ' — ' + a.n, 'WARNING'); } catch (e) {}
+        try { OBR.notification.show('⚔️ ' + tr('Your turn!', 'Твой ход!') + ' — ' + a.n + '. ' + tr('Tool ⚔️ D&D is on: click yourself, an enemy or the floor.', 'Включён инструмент ⚔️ D&D: кликни на себя, врага или пол.'), 'WARNING'); } catch (e) {}
         try { OBR.action.setBadgeText('!'); OBR.action.setBadgeBackgroundColor('#d9a441'); } catch (e) {}
         try { OBR.tool.activateTool('dndtable/tool'); } catch (e) {} // your turn: the ⚔️ D&D tool is ready (click, drag)
       } else if (!(a && a.cid && mine.has(a.cid))) { try { OBR.action.setBadgeText(undefined); } catch (e) {} }
@@ -305,6 +305,29 @@ export function startBackground(OBR, by) {
       if (d.left != null && d.ft > d.left) { say(d.left ? tr('Too far: you have {0} ft of movement left.', 'Слишком далеко: осталось {0} фт движения.').replace('{0}', d.left) : tr('No movement left (or not your turn).', 'Движения не осталось (или сейчас не твой ход).'), 'WARNING'); return; }
       try { await OBR.scene.items.updateItems([d.id], L => { L.forEach(x => { x.position = d.pos; }); }); } catch (e) { say(tr('Owlbear did not let you move this token.', 'Owlbear не дал сдвинуть этот токен.'), 'ERROR'); }
     }
+    // ---------- my turn: a green square = where I can still walk (only I see it), "🚶 25 ft" above it ----------
+    var reachKey = '', reachT = 0;
+    async function drawReach() {
+      if (DM) return;
+      try {
+        const st = get('obrstate', null); const mine = new Set(get('chars', []).map(c => c.id));
+        const a = st && st.on && st.list && st.list[st.turn];
+        let want = null;
+        if (a && a.cid && mine.has(a.cid) && st.strict !== false) {
+          const toks = await OBR.scene.items.getItems(it => it.layer === 'CHARACTER' && !!(it.metadata && it.metadata[LINK]) && it.metadata[LINK].k === 'pc' && it.metadata[LINK].cid === a.cid);
+          if (toks[0]) { await gridInfo(); const b = await OBR.scene.items.getItemBounds([toks[0].id]); want = { c: b.center, w: Math.max(b.width, b.height), left: Math.max(0, (a.mvMax || 30) - (a.mv || 0)) }; }
+        }
+        const k = JSON.stringify(want); if (k === reachKey) return; reachKey = k;
+        const old = await OBR.scene.local.getItems(it => it.metadata && it.metadata['dndtable/reach']); if (old.length) await OBR.scene.local.deleteItems(old.map(x => x.id));
+        const B = window.OBR_SDK; if (!want || !B || !B.buildCurve) return;
+        const half = want.w / 2 + Math.floor(want.left / G.mult) * G.dpi;
+        const sq = B.buildCurve().points([{ x: -half, y: -half }, { x: half, y: -half }, { x: half, y: half }, { x: -half, y: half }]).position(want.c).fillColor('#5cb85c').fillOpacity(0.1).strokeColor('#7bd389').strokeWidth(4).strokeOpacity(0.85).strokeDash([18, 10]).tension(0).closed(true).layer('DRAWING').locked(true).disableHit(true).metadata({ 'dndtable/reach': 1 }).build();
+        const lab = B.buildLabel().plainText('🚶 ' + tr('you can walk', 'можно пройти') + ' ' + want.left + ' ' + tr('ft', 'фт')).position({ x: want.c.x, y: want.c.y - half }).layer('DRAWING').locked(true).disableHit(true).backgroundOpacity(0.85).fontSize(22).metadata({ 'dndtable/reach': 2 }).build();
+        await OBR.scene.local.addItems([sq, lab]);
+      } catch (e) { console.warn('reach', e); }
+    }
+    function drawReachSoon() { clearTimeout(reachT); reachT = setTimeout(drawReach, 250); }
+    if (!DM) { try { OBR.scene.items.onChange(() => drawReachSoon()); } catch (e) {} drawReachSoon(); }
     async function dragCancel() { const d = drag; drag = null; if (d && d.stop) try { d.stop(); } catch (e) {} await clearRuler(); }
     try {
       await OBR.tool.create({ id: TOOL, icons: [{ icon: ICON, label: tr('D&D: actions and movement', 'D&D: действия и ход') }], defaultMode: MODE, shortcut: 'Y' });

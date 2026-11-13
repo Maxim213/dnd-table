@@ -28,11 +28,11 @@ export function startCard(OBR, opts) {
     const game = () => (DM ? get('curGame', null) : '');
     const gk = k => (DM ? 'g.' + game() + '.' + k : k);
     let item = null, point = null, mode = 'normal', note = '', view = null; // view: null | { multi: entry } | { area: entry, pt, picked }
-    let busy = false;
+    let busy = false, floor = false;
 
     // ---------- what was clicked ----------
     async function load() {
-      item = null; point = null;
+      item = null; point = null; floor = false;
       try {
         if (POP) {
           const c = get('obrPop', null) || {};
@@ -42,6 +42,7 @@ export function startCard(OBR, opts) {
           const sel = await OBR.player.getSelection(); item = sel && sel.length === 1 ? ((await OBR.scene.items.getItems(sel))[0] || null) : null;
         }
         if (item && item.layer !== 'CHARACTER' && item.attachedTo) item = (await OBR.scene.items.getItems([item.attachedTo]))[0] || item; // clicked a tag / ring
+        if (item && item.layer !== 'CHARACTER') { item = null; floor = true; } // the map / a drawing = the floor
       } catch (e) { item = null; }
     }
     const linkOf = it => (it && it.metadata && it.metadata[LINK]) || null;
@@ -60,7 +61,7 @@ export function startCard(OBR, opts) {
     const bar = (hp, mx) => '<div class="tc-bar"><i style="width:' + Math.max(0, Math.min(100, Math.round((hp / (mx || 1)) * 100))) + '%"></i></div>';
     const CRU = { Blinded: 'Ослеплён', Charmed: 'Очарован', Deafened: 'Оглох', Exhaustion: 'Истощение', Frightened: 'Напуган', Grappled: 'Схвачен', Incapacitated: 'Недееспособен', Invisible: 'Невидим', Paralyzed: 'Парализован', Petrified: 'Окаменел', Poisoned: 'Отравлен', Prone: 'Сбит с ног', Restrained: 'Опутан', Stunned: 'Ошеломлён', Unconscious: 'Без сознания', Concentrating: 'Концентрация' };
     const conds = cs => (cs && cs.length ? '<div class="tc-sub">⚠️ ' + cs.map(x => esc(ruOn() ? CRU[x] || x : x)).join(', ') + '</div>' : '');
-    const head = (pic, name, sub) => '<div class="tc-head">' + (pic ? '<img class="tc-pic" src="' + esc(pic) + '">' : '<div class="tc-pic">' + esc(Array.from(String(name || '?'))[0]) + '</div>') + '<div><div class="tc-name">' + esc(name) + '</div><div class="tc-sub">' + sub + '</div></div>' + (POP ? '<button class="tc-x" data-do="close" title="' + tr('Close', 'Закрыть') + '">✕</button>' : '') + '</div>';
+    const head = (pic, name, sub) => '<div class="tc-head">' + (pic && !/^(data:|https?:|blob:)/.test(pic) ? '<div class="tc-pic">' + esc(pic) + '</div>' : pic ? '<img class="tc-pic" src="' + esc(pic) + '">' : '<div class="tc-pic">' + esc(Array.from(String(name || '?'))[0]) + '</div>') + '<div><div class="tc-name">' + esc(name) + '</div><div class="tc-sub">' + sub + '</div></div>' + (POP ? '<button class="tc-x" data-do="close" title="' + tr('Close', 'Закрыть') + '">✕</button>' : '') + '</div>';
 
     // ---------- the map: tokens, distances, shapes ----------
     const G = { dpi: 150, mult: 5 };
@@ -125,7 +126,7 @@ export function startCard(OBR, opts) {
     }
     async function build() {
       const lk = linkOf(item);
-      if (!item && !point) return '<p class="tc-msg">' + tr('Select one token.', 'Выдели один токен.') + '</p>';
+      if (!item && !point && !floor) return '<p class="tc-msg">' + tr('Select one token.', 'Выдели один токен.') + '</p>';
       if (DM) return dmCard(lk);
       const f = fightPub();
       if (f && f.on) { const w = await fightWindow(f, lk); if (w) return w; }
@@ -186,31 +187,43 @@ export function startCard(OBR, opts) {
         tb = await boundsOf(item); ft = kind === 'self' ? 0 : await feet(myB, tb);
       } else if (point) ft = await feetTo(myB, point);
       const myTurn = f.list[f.turn] && f.list[f.turn].cid === meIn.cid; const ec = meIn.ec || { a: 0, b: 0, r: 0 }; const strict = f.strict !== false;
-      lastCtx = { f, meIn, hero, ft, tEntry, kind, myB, toks, tb };
+      const mvMax = meIn.mvMax || hero.speed || 30; const left = Math.max(0, mvMax - (meIn.mv || 0));
+      lastCtx = { f, meIn, hero, ft, tEntry, kind, myB, toks, tb, myTok, left, myTurn };
       if (view && view.area) return areaView();
       if (view && view.multi) return multiView();
       // header
       let h;
-      if (kind === 'point') h = head('', '📍 ' + tr('A spot on the map', 'Точка на карте'), (ft != null ? '📏 ' + ft + ' ' + tr('ft from you', 'фт от тебя') : tr('your token is not on the map', 'твоего токена нет на карте')));
+      if (kind === 'point') h = head('📍', tr('A spot on the map', 'Точка на карте'), (ft != null ? '📏 ' + ft + ' ' + tr('ft from you', 'фт от тебя') : tr('your token is not on the map', 'твоего токена нет на карте')));
       else if (kind === 'self') h = head(heroInfo(meIn.cid).pic, hero.n + ' — ' + tr('you', 'ты'), '❤️ ' + meIn.hp + ' / ' + meIn.mx + ' · ' + tr('AC', 'КД') + ' ' + meIn.ac);
       else if (kind === 'ally') h = head(heroInfo(tEntry.cid).pic, tEntry.n, '❤️ ' + tEntry.hp + ' / ' + tEntry.mx + (ft != null ? ' · 📏 ' + ft + ' ' + tr('ft', 'фт') : ''));
       else { const s = ST[tEntry.st] || ST.ok; h = head('', tEntry.n, s[2] + ' ' + (ruOn() ? s[1] : s[0]) + (ft != null ? ' · 📏 ' + ft + ' ' + tr('ft', 'фт') : '')); }
       h += conds(kind === 'point' ? [] : tEntry.cond);
       h += '<div class="tc-turn">' + (myTurn ? '⚔️ <b>' + tr('Your turn', 'Твой ход') + '</b>' : '⏳ ' + tr('Not your turn — reactions only', 'Не твой ход — только реакция')) + ' · ' +
         ['a', 'b', 'r'].map(k => '<span class="tc-ec' + (ec[k] ? ' used' : '') + '">' + COST[k][0] + '</span>').join('') +
-        ' · 🚶 ' + (meIn.mv || 0) + '/' + (meIn.mvMax || hero.speed || 30) + ' ' + tr('ft', 'фт') + (strict ? '' : ' · 🕊 ' + tr('free rules', 'свободные правила')) + '</div>';
+        ' · 🚶 ' + tr('left', 'осталось') + ' ' + left + ' ' + tr('ft', 'фт') + (strict ? '' : ' · 🕊 ' + tr('free rules', 'свободные правила')) + '</div>';
+      if (kind === 'self') h += '<div class="tc-move">🚶 ' + (myTurn ? tr('You can still walk', 'Можно пройти ещё') + ' <b>' + left + ' ' + tr('ft', 'фт') + '</b> (' + Math.floor(left / G.mult) + ' ' + tr('squares', 'клет.') + ') ' + tr('of', 'из') + ' ' + mvMax + '.<br><small>' +
+        tr('The green square on the map = where you can get. Drag your token with the ⚔️ D&D tool — the line shows what it costs. Or click the floor → «Walk here».', 'Зелёный квадрат на карте — куда можешь дойти. Тяни свой токен инструментом ⚔️ D&D — линия покажет, сколько потратишь. Или кликни по полу → «Идти сюда».') + '</small>'
+        : tr('You walk on your turn: speed', 'Ходить можно в свой ход: скорость') + ' ' + (hero.speed || 30) + ' ' + tr('ft', 'фт')) + '</div>';
       // which actions fit what was clicked
       const acts = hero.acts || [];
       const pick = kind === 'self' ? acts.filter(a => (['s', 'a', 'x'].includes(a.tk) && !a.area) || (a.area && a.area.o === 'u'))
         : kind === 'ally' ? acts.filter(a => ['a', 'x'].includes(a.tk) && !a.area)
           : kind === 'enemy' ? acts.filter(a => ['e', 'x'].includes(a.tk) && !a.area)
-            : acts.filter(a => a.area && a.area.o !== 'u');
+            : acts.filter(a => (a.area && a.area.o !== 'u') || a.tk === 'n');
       const groups = kind === 'self' ? [[tr('❤️ Heal and help yourself', '❤️ Лечение и усиления на себя'), pick.filter(a => !a.area && (a.heal || a.tk !== 'n'))], [tr('🌀 Around you', '🌀 Вокруг тебя'), pick.filter(a => a.area)]]
-        : kind === 'point' ? [[tr('💥 Areas — click one to see who it hits', '💥 Области — нажми, чтобы увидеть, кого заденет'), pick]]
+        : kind === 'point' ? [[tr('💥 Areas — click one to see who it hits', '💥 Области — нажми, чтобы увидеть, кого заденет'), pick.filter(a => a.area)], [tr('✨ Magic with no target', '✨ Магия без цели'), pick.filter(a => !a.area)]]
           : [[kind === 'enemy' ? tr('⚔️ Against this enemy', '⚔️ Против этого врага') : tr('❤️ For this ally', '❤️ Для союзника'), pick]];
       if (kind === 'enemy') h += '<div class="tc-row tc-mode">' + [['normal', tr('Normal', 'Обычно')], ['adv', '⬆ ' + tr('Advantage', 'Преимущество')], ['dis', '⬇ ' + tr('Disadvantage', 'Помеха')]].map(m => '<button data-mode="' + m[0] + '" class="' + (mode === m[0] ? 'on' : '') + '">' + m[1] + '</button>').join('') + '</div>';
       groups.forEach(([title, list]) => { if (list.length) h += '<h4>' + title + '</h4><div class="tc-acts">' + list.map(a => actBtn(a, kind, ft, myTurn, ec, strict)).join('') + '</div>'; });
-      if (!groups.some(g => g[1].length) && kind !== 'self') h += '<p class="tc-msg">' + (kind === 'point' ? tr('Your hero has no area spells.', 'У твоего героя нет заклинаний по области.') : tr('Nothing to use on this one.', 'Нечего применить на эту цель.')) + '</p>';
+      if (!groups.some(g => g[1].length) && kind !== 'self') h += '<p class="tc-msg">' + (kind === 'point' ? tr('No area spells or bombs.', 'Нет заклинаний по области и бомб.') : tr('Nothing to use on this one.', 'Нечего применить на эту цель.')) + '</p>';
+      if (kind === 'point') {
+        if (!point) h += '<p class="tc-hint">' + tr('To pick a spot: take the ⚔️ D&D tool (key Y) and click the floor.', 'Чтобы выбрать точку: возьми инструмент ⚔️ D&D (клавиша Y) и кликни по полу.') + '</p>';
+        else if (myB) {
+          const need = ft == null ? 0 : ft; const ok = myTurn && need <= left;
+          h += '<h4>🚶 ' + tr('Move', 'Движение') + '</h4><div class="tc-acts"><button data-do="walk"' + (ok || !strict ? '' : ' disabled') + '><b>🚶 ' + tr('Walk here', 'Идти сюда') + ' — ' + need + ' ' + tr('ft', 'фт') + '</b><small>' +
+            (myTurn ? (need <= left ? tr('left after', 'останется') + ' ' + (left - need) + ' ' + tr('ft', 'фт') : '⛔ ' + tr('not enough movement', 'не хватит движения') + ': ' + tr('left', 'осталось') + ' ' + left + ' ' + tr('ft', 'фт')) : '⛔ ' + tr('not your turn', 'не твой ход')) + '</small></button></div>';
+        }
+      }
       // basic actions
       const basic = (v, icon, en, ru, cost, help) => basicBtn(v, icon + ' ' + tr(en, ru), cost, myTurn, ec, strict, help);
       if (kind === 'self') {
@@ -218,8 +231,6 @@ export function startCard(OBR, opts) {
           basic('dash', '🏃', 'Dash', 'Рывок', 'a', tr('Double movement this turn', 'Двойное движение в этом ходу')) + basic('dodge', '🛡', 'Dodge', 'Уклонение', 'a', tr('Attacks against you: Disadvantage', 'Атаки по тебе с помехой')) +
           basic('disengage', '🚪', 'Disengage', 'Отход', 'a', tr('Walk away with no opportunity attacks', 'Уходишь без провоцированных атак')) + basic('hide', '🫥', 'Hide', 'Спрятаться', 'a', tr('Stealth vs 15', 'Скрытность против 15')) +
           (hero.rogue ? basic('dash', '🏃', 'Dash (bonus)', 'Рывок (бонус)', 'b', tr('Cunning Action', 'Хитрое действие')) + basic('disengage', '🚪', 'Disengage (bonus)', 'Отход (бонус)', 'b', tr('Cunning Action', 'Хитрое действие')) + basic('hide', '🫥', 'Hide (bonus)', 'Спрятаться (бонус)', 'b', tr('Cunning Action', 'Хитрое действие')) : '') + '</div>';
-        const other = (hero.acts || []).filter(a => a.tk === 'n');
-        if (other.length) h += '<h4>✨ ' + tr('Other magic (no target)', 'Прочая магия (без цели)') + '</h4><div class="tc-acts">' + other.map(a => actBtn(a, 'self', 0, myTurn, ec, strict)).join('') + '</div>';
         if (myTurn) h += '<div class="tc-row"><button class="primary" data-do="end">⏭ ' + tr('End my turn', 'Закончить ход') + '</button></div>';
       }
       if (kind === 'ally') h += '<div class="tc-acts">' + basic('help', '🤝', 'Help', 'Помощь', 'a', tr('Their next attack or check: Advantage', 'Его следующая атака или проверка — с преимуществом')) + '</div>';
@@ -233,7 +244,7 @@ export function startCard(OBR, opts) {
       else if (!(a.cost === 'r' || (a.k === 'weapon' && kind === 'enemy')) || ec.r) return tr('not your turn', 'не твой ход');
       const r = a.rng;
       if (r && ft != null && kind !== 'self' && kind !== 'point') {
-        if (r.k === 'melee' && ft > r.n) return tr('too far', 'далеко') + ': ' + ft + ' ' + tr('ft', 'фт') + ' — ' + tr('walk', 'подойди ещё на') + ' ' + (ft - r.n) + ' ' + tr('ft closer', 'фт');
+        if (r.k === 'melee' && ft > r.n) return tr('too far', 'далеко') + ': ' + ft + ' ' + tr('ft', 'фт') + ' — ' + tr('walk', 'подойди ещё на') + ' ' + (ft - r.n) + ' ' + tr('ft closer', 'фт') + (lastCtx && lastCtx.myTurn ? ' (' + tr('you have', 'у тебя') + ' ' + lastCtx.left + ' ' + tr('ft of movement', 'фт движения') + ')' : '');
         if (r.k === 'ranged' && ft > r.l) return tr('too far even for a long shot', 'слишком далеко даже для дальнего выстрела') + ' (' + ft + ' > ' + r.l + ')';
         if (r.k === 'spell' && ft > r.n) return tr('too far for the spell', 'далеко для заклинания') + ': ' + ft + ' > ' + r.n + ' ' + tr('ft', 'фт');
       }
@@ -304,7 +315,7 @@ export function startCard(OBR, opts) {
     async function send(req) {
       let player = ''; try { player = await OBR.player.getName(); } catch (er) {}
       const hero = lastCtx && lastCtx.hero;
-      req = Object.assign({ id: Math.random().toString(36).slice(2, 10), t: Date.now(), cid: hero ? hero.cid : '', mode, from: hero ? hero.n : '', player }, req);
+      req = Object.assign({ id: Math.random().toString(36).slice(2, 10), t: Date.now(), cid: hero ? hero.cid : '', atok: lastCtx && lastCtx.myTok ? lastCtx.myTok.id : '', ttok: item && lastCtx && lastCtx.kind !== 'point' ? item.id : '', mode, from: hero ? hero.n : '', player }, req);
       try { await OBR.broadcast.sendMessage(CH, { type: 'act', req }); note = '⏳ ' + tr('Sent to the DM — the result shows up in the roll log.', 'Отправлено мастеру — результат появится в журнале бросков.'); }
       catch (er) { note = '⚠️ ' + esc(er.message || er); }
       mode = 'normal'; view = null; set('obrAim', null); await clearPreview(); render();
@@ -340,6 +351,11 @@ export function startCard(OBR, opts) {
       if (d === 'multigo' && view && view.multi) { send({ aid: view.multi.id, tids: view.picked.slice(0, view.multi.m), tid: view.picked[0] }); return; }
       if (d === 'areago' && view && view.area) { send({ aid: view.area.id, tids: view.picked.slice(), area: { point: view.pt || (lastCtx.myB && lastCtx.myB.center), o: view.area.area.o } }); return; }
       if (d === 'end') { send({ kind: 'end' }); return; }
+      if (d === 'walk' && lastCtx && lastCtx.myTok && point) { // move my token to the clicked square (the DM's app counts the feet)
+        let p = point; try { p = await OBR.scene.grid.snapPosition(point, 1, false, true); } catch (e) {}
+        try { await OBR.scene.items.updateItems([lastCtx.myTok.id], L => { L.forEach(x => { x.position = p; }); }); note = '🚶 ' + tr('Moved.', 'Пошёл.'); } catch (e) { note = '⚠️ ' + tr('Owlbear did not let you move this token.', 'Owlbear не дал сдвинуть токен.'); }
+        render(); if (POP) setTimeout(() => { try { OBR.popover.close(POP_ID); } catch (e) {} }, 900); return;
+      }
       if (d === 'unlink') { await OBR.scene.items.updateItems([item.id], items => { items.forEach(it => { delete it.metadata[LINK]; }); }); await load(); render(); return; }
       if (d === 'sheet' || d === 'openmon') { // the panel (online.js) opens the hero's sheet / the monster's stat block
         set('obrOpen', d === 'sheet' ? { k: 'hero', id: b.dataset.id, t: Date.now() } : { k: 'mon', n: b.dataset.n, eid: (monEntry(lk) || {}).id || '', t: Date.now() });

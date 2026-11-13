@@ -106,7 +106,9 @@
       let d = null; try { d = E.compute(c); } catch (e) {}
       return { id: c.id, n: c.name || T('Unnamed'), cls: c.classKey || '', lvl: c.level, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, cond: (c.conditions || []).slice(0, 6) };
     });
-    return { on: (cb.turn >= 0 && list.length > 0), round: cb.round || 0, turn: cb.turn, list: list.slice(0, 40), party, game: U.game.name, strict: U.strict ? U.strict() : true };
+    let L2 = list, turn = cb.turn; // the players never learn about monsters whose tokens the DM hid
+    if (!priv && hiddenMon.size) { const act = list[cb.turn]; L2 = list.filter(x => !(x.k === 'mon' && hiddenMon.has(x.id))); turn = act ? L2.indexOf(act) : -1; }
+    return { on: (cb.turn >= 0 && list.length > 0), round: cb.round || 0, turn, list: L2.slice(0, 40), party, game: U.game.name, strict: U.strict ? U.strict() : true };
   }
   let stT = 0, lastSt = '', lastPriv = '';
   function queueState() {
@@ -122,7 +124,7 @@
 
   // ---------- 3c. DM: tokens on the map — a gold ring around whoever acts now; tokens named like a hero / monster link themselves ----------
   const LINK = 'dndtable/link', RING = 'dndtable/ring';
-  let ringKey = '', namesKey = '';
+  let ringKey = '', namesKey = '', hiddenKey = '', hiddenMon = new Set();
   U.obrTurnRing = async function (pv) {
     if (!U.DM || !OBR || !OBR.scene) return;
     try { if (!(await OBR.scene.isReady())) return; } catch (e) { return; }
@@ -137,6 +139,18 @@
         list.filter(x => x.k === 'mon').forEach(x => { byName[norm(x.n)] = { k: 'mon', eid: x.id, n: x.n }; });
         const need = it => it.layer === 'CHARACTER' && !(it.metadata && it.metadata[LINK]) && !!byName[norm(it.name)];
         if ((await OBR.scene.items.getItems(need)).length) await OBR.scene.items.updateItems(need, items => { items.forEach(it => { it.metadata[LINK] = byName[norm(it.name)]; }); });
+        // copied tokens carry the same link ("Goblin 1" three times) → give each copy its own free monster of the same kind;
+        // a token named "Goblin" (no number) → the first free "Goblin 1 / 2 / 3"
+        const base = s => norm(s).replace(/\s*#?\d+$/, '');
+        const monToks = await OBR.scene.items.getItems(it => it.layer === 'CHARACTER' && (!(it.metadata && it.metadata[LINK]) || it.metadata[LINK].k === 'mon'));
+        const used = new Set(), extra = [];
+        monToks.forEach(t => { const l = t.metadata && t.metadata[LINK]; if (!l) { extra.push(t); return; } const key = l.eid || l.n; if (used.has(key)) extra.push(t); else used.add(key); });
+        const free = list.filter(x => x.k === 'mon' && !used.has(x.id)); const assign = {};
+        extra.forEach(t => { const l = t.metadata && t.metadata[LINK]; const nm = base(l ? l.n : t.name); if (!nm) return; const i = free.findIndex(x => base(x.n) === nm); if (i < 0) return; const x = free.splice(i, 1)[0]; assign[t.id] = { k: 'mon', eid: x.id, n: x.n }; });
+        if (Object.keys(assign).length) await OBR.scene.items.updateItems(Object.keys(assign), items => { items.forEach(it => { it.metadata[LINK] = assign[it.id]; }); });
+        // monsters whose tokens are hidden (the DM's 👁 "Hide") are not shown to the players
+        const hid = (await OBR.scene.items.getItems(it => it.layer === 'CHARACTER' && it.visible === false && !!(it.metadata && it.metadata[LINK]) && it.metadata[LINK].k === 'mon')).map(it => it.metadata[LINK].eid).filter(Boolean);
+        const hk = hid.slice().sort().join(','); if (hk !== hiddenKey) { hiddenKey = hk; hiddenMon = new Set(hid); queueState(); }
       } catch (e) { console.warn('auto-link', e); }
     }
     ensureOwners(); tokenTags(pv);
@@ -203,16 +217,19 @@
     try { GRID.dpi = (await OBR.scene.grid.getDpi()) || 150; const s = await OBR.scene.grid.getScale(); const m = s && s.parsed ? Number(s.parsed.multiplier) : NaN; GRID.mult = m > 0 ? m : 5; } catch (e) {}
   }
   const linkOfIt = it => (it && it.metadata && it.metadata[LINK]) || null;
-  async function tokenOf(entry) {
+  // the token of a fight entry; pref = the token the player really clicked / stands on (copied tokens can share a link)
+  async function tokenOf(entry, pref) {
     if (!OBR || !OBR.scene || !entry) return null;
+    const match = it => { const l = linkOfIt(it); return !!l && (entry.type === 'pc' ? l.k === 'pc' && l.cid === entry.charId : l.k === 'mon' && (l.eid === entry.id || l.n === entry.name)); };
     try {
-      const L = await OBR.scene.items.getItems(it => { const l = linkOfIt(it); return !!l && (entry.type === 'pc' ? l.k === 'pc' && l.cid === entry.charId : l.k === 'mon' && (l.eid === entry.id || l.n === entry.name)); });
-      return L[0] || null;
+      if (pref) { const p = (await OBR.scene.items.getItems([pref]))[0]; if (p && match(p)) return p; }
+      const L = await OBR.scene.items.getItems(match);
+      return L.find(it => linkOfIt(it).eid === entry.id) || L[0] || null;
     } catch (e) { return null; }
   }
   // feet between two fight entries, edge to edge (big creatures take more squares); null = no tokens on the map
-  async function feetBetween(e1, e2) {
-    const [t1, t2] = [await tokenOf(e1), await tokenOf(e2)]; if (!t1 || !t2) return null;
+  async function feetBetween(e1, e2, p1, p2) {
+    const [t1, t2] = [await tokenOf(e1, p1), await tokenOf(e2, p2)]; if (!t1 || !t2) return null;
     try {
       await gridInfo();
       const [b1, b2] = [await OBR.scene.items.getItemBounds([t1.id]), await OBR.scene.items.getItemBounds([t2.id])];
@@ -255,7 +272,7 @@
     if (!OBR || !tid || tid === '__all') return { ok: true, mode: q.mode };
     const cb = S.combat; const target = cb.list.find(x => x.id === tid); const r = rIn || rangeOf(a);
     if (!target || !r || target.id === actor.id) return { ok: true, mode: q.mode };
-    const ft = await feetBetween(actor, target);
+    const ft = await feetBetween(actor, target, q.atok, tid === (q.tids && q.tids.length > 1 ? null : q.tid) ? q.ttok : null);
     if (ft == null) return { ok: true, mode: q.mode, note: T('(distance not checked: put both tokens on the map and link them)') };
     const tn = U.cbTarget(target) ? U.cbTarget(target).name : target.name || '';
     if (r.k === 'melee' && ft > r.n) return { ok: false, msg: T('Too far: {0} is {1} ft away, you reach {2} ft. Walk closer first.', tn, ft, r.n) };
@@ -266,7 +283,7 @@
       if (ft > r.n) dis = T('long range ({0} ft > {1} ft)', ft, r.n);
       if (!dis) { // shooting with an enemy right next to you
         const foes = cb.list.filter(x => x.type === 'mon' && (Number(x.hp) || 0) > 0);
-        for (const f of foes) { const d0 = await feetBetween(actor, f); if (d0 != null && d0 <= 5) { dis = T('an enemy is right next to you'); break; } }
+        for (const f of foes) { const d0 = await feetBetween(actor, f, q.atok); if (d0 != null && d0 <= 5) { dis = T('an enemy is right next to you'); break; } }
       }
     }
     let mode = q.mode;
@@ -274,8 +291,8 @@
     return { ok: true, mode, ft, note: '📏 ' + ft + ' ' + T('ft') + (dis ? ' · ' + T('Disadvantage: {0}', dis) : '') };
   }
   // feet from a fight entry's token to a point on the map (an area spell's centre)
-  async function feetToPoint(entry, pt) {
-    const t = await tokenOf(entry); if (!t || !pt) return null;
+  async function feetToPoint(entry, pt, pref) {
+    const t = await tokenOf(entry, pref); if (!t || !pt) return null;
     try { await gridInfo(); const b = await OBR.scene.items.getItemBounds([t.id]); return Math.round(await OBR.scene.grid.getDistance(b.center, pt)) * GRID.mult; } catch (e) { return null; }
   }
 
@@ -315,7 +332,7 @@
       if ((b === 'grapple' || b === 'shove' || b === 'help') && !tg) return refuse(q, T('Choose a target first.'));
       let note = '';
       if (b === 'grapple' || b === 'shove') {
-        const ft = await feetBetween(actor, tcb); if (ft != null) note = '📏 ' + ft + ' ' + T('ft');
+        const ft = await feetBetween(actor, tcb, q.atok, q.ttok); if (ft != null) note = '📏 ' + ft + ' ' + T('ft');
         if (ft != null && bad(ft > 5, T('Too far: {0} is {1} ft away, you reach {2} ft. Walk closer first.', tg.name, ft, 5))) return '';
       }
       ec[k]++; const top = S.log[0];
@@ -371,7 +388,7 @@
     if (cost !== '-' && bad(ec[cost] >= 1, T('{0} is already used this turn.', T(U.ECON_NAME[cost])) + (cost === 'r' ? ' ' + T('It comes back at the start of your turn.') : ''))) return '';
     let mode = q.mode, note = '';
     if (q.area && q.area.point) { // an area: its centre must be within the spell's range
-      const r = rangeOf(a); const ft = r ? await feetToPoint(actor, q.area.point) : null;
+      const r = rangeOf(a); const ft = r ? await feetToPoint(actor, q.area.point, q.atok) : null;
       if (ft != null) { note = '📏 ' + ft + ' ' + T('ft'); if (bad(ft > r.n, T('Too far for this spell: {0} ft, the spell reaches {1} ft.', ft, r.n))) return ''; }
     } else {
       for (const tid of tids) { const rg = await checkRange(q, a, actor, tid); if (!rg.ok && bad(true, rg.msg)) return ''; if (rg.ok && tids.length === 1) mode = rg.mode; if (rg.note && !note) note = rg.note; }
