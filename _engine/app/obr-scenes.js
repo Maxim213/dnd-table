@@ -72,18 +72,27 @@
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (g[y][x] === 2 && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => g[y + dy][x + dx] === 1) && R() < 0.5) doors.push([x, y]);
     return { g, rooms, doors };
   }
-  function carveForest(W, H, R) {
+  // o: { dense (more trees), clearing (an open circle in the middle, a camp fire), oak (a meadow below, a huge oak), noPath }
+  function carveForest(W, H, R, o) {
+    o = o || {};
     const g = []; for (let y = 0; y < H; y++) { g.push([]); for (let x = 0; x < W; x++) g[y].push(1); }
     const trees = [];
-    for (let c = 0; c < Math.round(W * H / 22); c++) { // clusters of trees
-      const cx = Math.floor(R() * W), cy = Math.floor(R() * H), n = 2 + Math.floor(R() * 5);
+    const clusters = Math.round(W * H / (o.dense ? 11 : 22));
+    for (let c = 0; c < clusters; c++) { // clusters of trees
+      const cx = Math.floor(R() * W), cy = Math.floor(R() * (o.oak ? H * 0.45 : H)), n = 2 + Math.floor(R() * 5);
       for (let i = 0; i < n; i++) { const x = Math.min(W - 1, Math.max(0, cx + Math.floor(R() * 4) - 2)), y = Math.min(H - 1, Math.max(0, cy + Math.floor(R() * 4) - 2)); g[y][x] = 0; }
     }
+    if (o.oak) for (let y = Math.floor(H * 0.75); y < H; y++) for (let x = 0; x < W; x++) if (R() < 0.12) g[y][x] = 0; // a few trees at the bottom edge
+    const mid = [Math.floor(W / 2), Math.floor(H / 2)];
+    if (o.clearing) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (Math.hypot(x - mid[0], y - mid[1]) < 6.5) g[y][x] = 1;
     // a winding path from left to right
     let y = Math.floor(H / 2); const path = [];
-    for (let x = 0; x < W; x++) { if (R() < 0.35) y = Math.min(H - 2, Math.max(1, y + (R() < 0.5 ? -1 : 1))); [y - 1, y, y + 1].forEach(q => { if (q >= 0 && q < H) g[q][x] = 1; }); path.push([x, y]); }
-    for (let yy = 0; yy < H; yy++) for (let x = 0; x < W; x++) if (!g[yy][x]) trees.push([x, yy]);
-    return { g, path, trees };
+    if (!o.noPath) for (let x = 0; x < W; x++) { if (R() < 0.35) y = Math.min(H - 2, Math.max(1, y + (R() < 0.5 ? -1 : 1))); [y - 1, y, y + 1].forEach(q => { if (q >= 0 && q < H) g[q][x] = 1; }); path.push([x, y]); }
+    else for (let k = 0; k < 6; k++) { const cx = 3 + Math.floor(R() * (W - 6)), cy = 3 + Math.floor(R() * (H - 6)); for (let yy = cy - 2; yy <= cy + 2; yy++) for (let xx = cx - 2; xx <= cx + 2; xx++) if (g[yy] && g[yy][xx] !== undefined) g[yy][xx] = 1; } // small clearings
+    let oak = null;
+    if (o.oak) { oak = [mid[0], Math.floor(H * 0.55)]; for (let yy = oak[1] - 1; yy <= oak[1] + 1; yy++) for (let xx = oak[0] - 1; xx <= oak[0] + 1; xx++) g[yy][xx] = 0; }
+    for (let yy = 0; yy < H; yy++) for (let x = 0; x < W; x++) if (!g[yy][x] && !(oak && Math.abs(x - oak[0]) <= 1 && Math.abs(yy - oak[1]) <= 1)) trees.push([x, yy]);
+    return { g, path, trees, camp: o.clearing ? mid : null, oak };
   }
   // distances from the entrance (BFS over floor)
   function dist(g, W, H, sx, sy) {
@@ -128,6 +137,8 @@
       map.trees.forEach(([x, y]) => { const cx = (x + 0.5) * P + (R() - 0.5) * P * 0.3, cy = (y + 0.5) * P + (R() - 0.5) * P * 0.3, r = P * (0.55 + R() * 0.3);
         ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(cx + r * 0.2, cy + r * 0.25, r, 0, 7); ctx.fill();
         const gr = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r); gr.addColorStop(0, '#5f8f3a'); gr.addColorStop(1, '#1e3a18'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); });
+      if (map.camp) { const [x, y] = map.camp; glow(ctx, (x + 0.5) * P, (y + 0.5) * P, P * 3.5, 'rgba(255,150,50,.4)'); ctx.fillStyle = '#ff9a3a'; ctx.beginPath(); ctx.arc((x + 0.5) * P, (y + 0.5) * P, P * 0.25, 0, 7); ctx.fill(); for (let i = 0; i < 4; i++) rock(ctx, (x + 0.5) * P + Math.cos(i * 1.6) * P * 1.6, (y + 0.5) * P + Math.sin(i * 1.6) * P * 1.6, P * 0.25, R); }
+      if (map.oak) { const cx = (map.oak[0] + 0.5) * P, cy = (map.oak[1] + 0.5) * P, r = P * 1.9; ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.arc(cx + r * 0.2, cy + r * 0.25, r, 0, 7); ctx.fill(); const gr = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r); gr.addColorStop(0, '#7aa04a'); gr.addColorStop(1, '#203d16'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }
       return cv;
     }
     if (type === 'dungeon') {
@@ -164,11 +175,11 @@
     return cv;
   }
   // → { type, W, H, g, start: [x, y], spots(n), heroSpots(n), walls, canvas }
-  U.makeMap = function (type, size, seed, P) {
+  U.makeMap = function (type, size, seed, P, opts) {
     const [W, H] = SIZES[size] || SIZES.m; const R = rnd(seed); P = P || 80;
     let map = { type, W, H, R, P };
     if (type === 'dungeon') Object.assign(map, carveDungeon(W, H, R));
-    else if (type === 'forest') Object.assign(map, carveForest(W, H, R));
+    else if (type === 'forest') Object.assign(map, carveForest(W, H, R, opts));
     else map.g = carveCave(W, H, R);
     const g = map.g.map(r => r.map(v => (v ? 1 : 0))); map.g = g;
     let start = null; for (let x = 0; x < W && !start; x++) for (let y = 0; y < H; y++) if (g[y][x]) { start = [x, y]; break; }
@@ -193,9 +204,12 @@
     const base = b.buildImageUpload(o.mapBlob).dpi(o.cellPx).name(o.name).locked(true).build();
     const items = o.tokens.map(t => tokenItem(t.name, t.key, t.x, t.y, t.hidden));
     const walls = (o.walls || []).map(([x1, y1, x2, y2]) => b.buildWall().points([{ x: x1 * GD, y: y1 * GD }, { x: x2 * GD, y: y2 * GD }]).doubleSided(true).blocking(true).locked(true).build());
-    const mk = withWalls => b.buildSceneUpload().name(o.name).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(!!o.fog).items(items.concat(withWalls ? walls : [])).build();
-    try { await OBR.assets.uploadScenes([mk(true)]); return walls.length ? 'walls' : 'ok'; }
-    catch (e) { if (!walls.length) throw e; console.warn('scene with walls', e); await OBR.assets.uploadScenes([mk(false)]); return 'nowalls'; }
+    // a 40 ft light on each hero who needs it: with Owlbear's dynamic fog the players see what it lights up
+    const lights = b.buildLight ? o.tokens.map((t, i) => t.light ? b.buildLight().attenuationRadius(GD * 8).sourceRadius(GD * 0.3).falloff(1).lightType('PRIMARY').position(items[i].position).attachedTo(items[i].id).disableHit(true).locked(true).build() : null).filter(Boolean) : [];
+    const extra = walls.concat(lights);
+    const mk = full => b.buildSceneUpload().name(o.name).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(!!o.fog).items(items.concat(full ? extra : [])).build();
+    try { await OBR.assets.uploadScenes([mk(true)]); return extra.length ? 'full' : 'ok'; }
+    catch (e) { if (!extra.length) throw e; console.warn('scene with walls / lights', e); await OBR.assets.uploadScenes([mk(false)]); return 'plain'; }
   }
   // the monsters of a prepared fight → { name, key } × qty
   function encTokens(enc) {
@@ -239,40 +253,107 @@
   async function toScene(list) {
     const w = await OBR.viewport.getWidth(), h = await OBR.viewport.getHeight(), s = await OBR.viewport.getScale(), p = await OBR.viewport.getPosition();
     const cx = Math.floor(((w / 2 - p.x) / s) / GD), cy = Math.floor(((h / 2 - p.y) / s) / GD);
-    const add = list.map((t, i) => tokenItem(t.name, t.key, cx + (i % 5) - 2, cy + Math.floor(i / 5), !!t.hidden));
+    const add = list.map((t, i) => tokenItem(t.name, t.key, cx + (i % 5) - 2, cy + Math.floor(i / 5), !!t.hidden, t.meta));
     if (add.length) await OBR.scene.items.addItems(add);
     return add.length;
   }
-  const ST = { type: 'cave', size: 'm', seed: 1 + Math.floor(Math.random() * 9999), enc: '', heroes: true, fog: false, walls: true, name: '', hide: true };
-  const TYPES = { cave: ['🕳', 'Cave'], dungeon: ['🏰', 'Dungeon'], forest: ['🌲', 'Forest'] };
-  let lastMap = null;
+  // "🗺 Onto the scene" in the fight and on a monster's card: its token on the open scene (it remembers which monster it is)
+  U.obrToScene = async (m, q) => {
+    try {
+      const list = []; for (let i = 0; i < (q || 1); i++) list.push({ name: m.name, key: monToken(m), hidden: ST.hide, meta: { 'dndtable/mon': { mid: m.id, cr: m.cr || '' } } });
+      await toScene(list);
+      U.toast('🗺 ' + T('{0} is on the scene ({1}). Then ⚔️ «Fight with everyone on the scene».', esc(m.name) + (q > 1 ? ' ×' + q : ''), ST.hide ? T('hidden — right click → Show') : T('visible')));
+      readSoon();
+    } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); }
+  };
+
+  // ---------- who is on the open scene (the fight screen shows it) → "⚔️ Fight with everyone on the scene" ----------
+  let sceneToks = [];
+  async function readScene() {
+    try {
+      if (!(await OBR.scene.isReady())) { sceneToks = []; return; }
+      sceneToks = (await OBR.scene.items.getItems(it => it.layer === 'CHARACTER')).map(it => ({ id: it.id, name: it.name || '?', visible: it.visible !== false, link: (it.metadata || {})['dndtable/link'] || null, mon: (it.metadata || {})['dndtable/mon'] || null }));
+    } catch (e) { sceneToks = []; }
+  }
+  let rT = 0;
+  function readSoon() { clearTimeout(rT); rT = setTimeout(async () => { const k = JSON.stringify(sceneToks); await readScene(); if (JSON.stringify(sceneToks) !== k && S.view === 'combat' && (S.combatTab || 'fight') === 'fight') U.render(); }, 400); }
+  try { OBR.scene.items.onChange(readSoon); OBR.scene.onReadyChange(readSoon); } catch (e) {}
+  readSoon();
+  U.sceneBox = function () {
+    if (!U.DM) return '';
+    const L = (S.combat && S.combat.list) || [];
+    const inFight = t => !!t.link && (t.link.k === 'pc' ? L.some(x => x.charId === t.link.cid) : L.some(x => x.id === t.link.eid));
+    return '<div class="scenebox"><p><b>🗺 ' + T('On the Owlbear scene now') + ' (' + sceneToks.length + '):</b> ' +
+      (sceneToks.length ? sceneToks.map(t => '<span class="chip small' + (t.visible ? '' : ' dim') + '">' + (t.link && t.link.k === 'pc' ? '🧙 ' : '👹 ') + esc(t.name) + (t.visible ? '' : ' 🙈') + (inFight(t) ? ' ⚔️' : '') +
+        ' <button class="x" data-act="scVis" data-id="' + esc(t.id) + '" title="' + esc(t.visible ? T('Hide from the players') : T('Show to the players')) + '">' + (t.visible ? '🙈' : '👁') + '</button><button class="x" data-act="scDel" data-id="' + esc(t.id) + '" title="' + esc(T('Remove from the scene')) + '">✕</button></span>').join(' ')
+        : '<small>' + T('Nobody yet. Put monsters with 🗺 Onto the scene, heroes with 🗺 in the top bar.') + '</small>') + '</p>' +
+      (sceneToks.length ? '<p><button class="primary" data-act="cbFromScene">⚔️ ' + T('Fight with everyone on the scene') + '</button> <small class="hint">' + T('heroes and monsters on the scene (hidden too) go into the fight, initiative is rolled') + '</small></p>' : '') + '</div>';
+  };
+  U.ACT.scVis = async ds => { try { await OBR.scene.items.updateItems([ds.id], L => { L.forEach(x => { x.visible = !(x.visible !== false); }); }); readSoon(); } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); } };
+  U.ACT.scDel = async ds => { if (!confirm(T('Remove this token from the scene?'))) return; try { await OBR.scene.items.deleteItems([ds.id]); readSoon(); } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); } };
+  U.ACT.cbFromScene = async () => {
+    await readScene();
+    const toks = await OBR.scene.items.getItems(it => it.layer === 'CHARACTER');
+    if (!toks.length) { U.toast(T('Nobody on the scene.')); return; }
+    if (S.combat.list.length && !confirm(T('Start a new fight with everyone on the scene? The current fight list is replaced.'))) return;
+    S.combat = { list: [], round: 0, turn: -1, target: {} };
+    const norm = s => String(s || '').trim().toLowerCase(); const base = s => norm(s).replace(/\s*#?\d+$/, '');
+    const all = U.allMonsters ? U.allMonsters() : []; const links = {}; const skipped = [];
+    for (const t of toks) {
+      const md = t.metadata || {}; const l = md['dndtable/link'];
+      const hero = l && l.k === 'pc' ? U.byId(l.cid) : (S.chars || []).find(c => norm(c.name) === norm(t.name));
+      if (hero) { if (!S.combat.list.some(x => x.charId === hero.id)) S.combat.list.push({ id: E.uid(), type: 'pc', charId: hero.id, init: null }); links[t.id] = { k: 'pc', cid: hero.id, n: hero.name }; continue; }
+      const mm = md['dndtable/mon']; let m = mm && U.monById ? U.monById(mm.mid) : null;
+      if (m && mm.cr && String(mm.cr) !== String(m.cr) && U.atCr) m = U.atCr(m, mm.cr);
+      if (!m) m = all.find(x => base(x.name) === base(t.name) || base(x.en || '') === base(t.name) || base(x.n || '') === base(t.name));
+      if (!m) { skipped.push(t.name); continue; }
+      U.addMonEntry(m, 1); const e = S.combat.list[S.combat.list.length - 1];
+      links[t.id] = { k: 'mon', eid: e.id, n: e.name };
+    }
+    // number the monsters of the same kind (Goblin 1, Goblin 2…) and write it on their tokens
+    const cnt = {}; S.combat.list.filter(x => x.type === 'mon').forEach(x => { cnt[x.srcId] = (cnt[x.srcId] || 0) + 1; });
+    const idx = {}; S.combat.list.filter(x => x.type === 'mon').forEach(x => { if (cnt[x.srcId] > 1) { idx[x.srcId] = (idx[x.srcId] || 0) + 1; x.name = x.name.replace(/\s+\d+$/, '') + ' ' + idx[x.srcId]; } });
+    Object.keys(links).forEach(id => { const l = links[id]; if (l.k === 'mon') { const e = S.combat.list.find(x => x.id === l.eid); if (e) l.n = e.name; } });
+    await OBR.scene.items.updateItems(Object.keys(links), L => { L.forEach(it => { const l = links[it.id]; it.metadata['dndtable/link'] = l; it.name = l.n; if (it.text) it.text.plainText = l.n; }); });
+    U.saveCombat(); S.combatTab = 'fight'; U.ACT.cbStart();
+    U.toast('⚔️ ' + T('Fight: {0} heroes, {1} monsters. Initiative rolled.', S.combat.list.filter(x => x.type === 'pc').length, S.combat.list.filter(x => x.type === 'mon').length) + (skipped.length ? '<br>' + T('Not a known monster (skipped): {0}', esc(skipped.join(', '))) : ''));
+    readSoon();
+  };
+
+  // ---------- ready-made maps (all big). Dungeons come dark: fog + walls + light on the heroes (Owlbear's dynamic fog) ----------
+  const MAPS = [
+    { id: 'd1', type: 'dungeon', seed: 311, en: 'Crypt of the Forgotten King', ru: 'Склеп забытого короля' },
+    { id: 'd2', type: 'dungeon', seed: 1777, en: 'Cellars of the Old Fortress', ru: 'Подвалы старой крепости' },
+    { id: 'd3', type: 'dungeon', seed: 4242, en: 'The Cultists\' Den', ru: 'Логово культистов' },
+    { id: 'd4', type: 'dungeon', seed: 905, en: 'Flooded Catacombs', ru: 'Затопленные катакомбы' },
+    { id: 'f1', type: 'forest', seed: 77, en: 'Path through the Black Wood', ru: 'Тропа через Чёрный лес' },
+    { id: 'f2', type: 'forest', seed: 2024, en: 'Bandits\' Glade', ru: 'Поляна разбойников', opts: { clearing: true, dense: true } },
+    { id: 'f3', type: 'forest', seed: 533, en: 'Edge of the Old Oak', ru: 'Опушка у старого дуба', opts: { oak: true, noPath: true } },
+    { id: 'f4', type: 'forest', seed: 6100, en: 'Wolf Thicket', ru: 'Волчья чаща', opts: { dense: true, noPath: true } }
+  ];
+  const mapName = m => (U.LANG === 'ru' ? m.ru : m.en);
+  const ST = { map: 'd1', heroes: true, hide: true, dark: true };
+  const made = {};
+  const mapOf = m => made[m.id] || (made[m.id] = U.makeMap(m.type, 'l', m.seed, 80, m.opts));
   function preview() {
-    lastMap = U.makeMap(ST.type, ST.size, ST.seed, 80);
+    const m = MAPS.find(x => x.id === ST.map) || MAPS[0]; const map = mapOf(m);
     const pv = document.getElementById('scPrev'); if (!pv) return;
-    const c = pv.getContext('2d'); const k = pv.width / lastMap.canvas.width; pv.height = Math.round(lastMap.canvas.height * k);
-    c.drawImage(lastMap.canvas, 0, 0, pv.width, pv.height);
-    const enc = S.encounters.find(e => e.id === ST.enc); const mons = encTokens(enc); const P = 80 * k;
-    c.font = Math.round(P * 0.7) + 'px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    lastMap.spots(mons.length).forEach(([x, y]) => { c.fillStyle = 'rgba(200,40,40,.85)'; c.beginPath(); c.arc((x + 0.5) * P, (y + 0.5) * P, P * 0.42, 0, 7); c.fill(); });
-    if (ST.heroes) lastMap.heroSpots(party().length).forEach(([x, y]) => { c.fillStyle = 'rgba(60,120,230,.9)'; c.beginPath(); c.arc((x + 0.5) * P, (y + 0.5) * P, P * 0.42, 0, 7); c.fill(); });
+    const c = pv.getContext('2d'); const k = pv.width / map.canvas.width; pv.height = Math.round(map.canvas.height * k);
+    c.drawImage(map.canvas, 0, 0, pv.width, pv.height); const P = 80 * k;
+    if (ST.heroes) map.heroSpots(party().length).forEach(([x, y]) => { c.fillStyle = 'rgba(60,120,230,.9)'; c.beginPath(); c.arc((x + 0.5) * P, (y + 0.5) * P, P * 0.42, 0, 7); c.fill(); });
   }
   function scenesPop() {
     const pop = document.getElementById('pop'); if (!pop) return;
-    if (!ST.name) ST.name = T(TYPES[ST.type][1]) + ' #' + ST.seed;
+    const cur = MAPS.find(x => x.id === ST.map) || MAPS[0];
+    const btn = m => '<button class="mini' + (ST.map === m.id ? ' on' : '') + '" data-act="scMap" data-v="' + m.id + '">' + (m.type === 'dungeon' ? '🏰 ' : '🌲 ') + esc(mapName(m)) + '</button>';
     pop.innerHTML = '<div class="popcard settings scenes" role="dialog"><div class="ph"><h2>🗺 ' + T('Scenes for Owlbear') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
-      '<p class="hint">' + T('Make a battle map, put the monsters of a prepared fight on it (hidden) and the heroes at the entrance, and upload it into Owlbear as a new scene.') + '</p>' +
-      '<p>' + Object.keys(TYPES).map(k => '<button class="mini' + (ST.type === k ? ' on' : '') + '" data-act="scType" data-v="' + k + '">' + TYPES[k][0] + ' ' + T(TYPES[k][1]) + '</button>').join(' ') + ' &nbsp; ' +
-      [['s', T('small 20×14')], ['m', T('medium 28×20')], ['l', T('big 36×24')]].map(s => '<button class="mini' + (ST.size === s[0] ? ' on' : '') + '" data-act="scSize" data-v="' + s[0] + '">' + s[1] + '</button>').join(' ') + '</p>' +
-      '<p>' + T('Map number') + ' <input id="scSeed" type="number" value="' + ST.seed + '" class="tiny" data-on="scSeed"> <button class="mini" data-act="scNew">🎲 ' + T('Another map') + '</button></p>' +
+      '<p><b>🏰 ' + T('Dungeons') + ':</b> ' + MAPS.filter(m => m.type === 'dungeon').map(btn).join(' ') + '</p>' +
+      '<p><b>🌲 ' + T('Forests') + ':</b> ' + MAPS.filter(m => m.type === 'forest').map(btn).join(' ') + '</p>' +
       '<canvas id="scPrev" width="520" height="360" style="width:100%;border-radius:8px;border:1px solid #5a4630;background:#111"></canvas>' +
-      '<p class="hint">🔴 ' + T('monsters (hidden at first)') + ' · 🔵 ' + T('heroes') + '</p>' +
-      '<p>' + T('Monsters from a prepared fight:') + ' <select data-on="scEnc"><option value="">' + T('— none —') + '</option>' + S.encounters.map(e => '<option value="' + esc(e.id) + '"' + (ST.enc === e.id ? ' selected' : '') + '>' + esc(e.name) + '</option>').join('') + '</select></p>' +
-      '<p><label class="inl"><input type="checkbox" data-on="scHeroes"' + (ST.heroes ? ' checked' : '') + '> 🧙 ' + T('the party\'s heroes at the entrance') + '</label> ' +
-      '<label class="inl"><input type="checkbox" data-on="scFog"' + (ST.fog ? ' checked' : '') + '> 🌫 ' + T('fog over everything (you reveal it)') + '</label> <small class="hint">' + T('(with fog the map looks grey to you — that is the fog; erase it with Owlbear\'s Fog tool)') + '</small> ' +
-      '<label class="inl"><input type="checkbox" data-on="scWalls"' + (ST.walls ? ' checked' : '') + '> 🧱 ' + T('walls (for dynamic fog)') + '</label></p>' +
-      '<p>' + T('Scene name') + ' <input id="scName" value="' + esc(ST.name) + '" data-in="scName"></p>' +
-      '<p class="btnrow"><button class="primary" data-act="scAll">📦 ' + T('Everything into Owlbear in one go') + '</button> <button data-act="scUpload">🗺 ' + T('Only the scene') + '</button> <button data-act="scFolder">📁 ' + T('Scenario from a folder…') + '</button></p>' +
-      '<p class="hint">' + T('«Everything»: the scene + all heroes (with their portraits) + all monsters of your fights go into Owlbear\'s library (Characters) — then you just drag them onto any map.') + '</p>' +
+      '<p><label class="inl"><input type="checkbox" data-on="scHeroes"' + (ST.heroes ? ' checked' : '') + '> 🧙 ' + T('the party\'s heroes at the entrance') + ' 🔵</label> ' +
+      '<label class="inl"><input type="checkbox" data-on="scDark"' + (ST.dark ? ' checked' : '') + '> 🌑 ' + T('dungeons are dark: fog, walls and a 40 ft light on each hero') + '</label></p>' +
+      '<p class="hint">' + T('Dark dungeon: the players see only what their heroes light up — that needs Owlbear\'s Dynamic Fog extension (add it to the room). For you the dark looks grey: that is normal.') + '</p>' +
+      '<p class="btnrow"><button class="primary" data-act="scUpload">📦 ' + T('Upload «{0}»', esc(mapName(cur))) + '</button> <button data-act="scAllMaps">📦📦 ' + T('Import all maps') + '</button> <button data-act="scFolder">📁 ' + T('Scenario from a folder…') + '</button></p>' +
       '<p class="hint" id="scMsg"></p>' + tokenList() + '</div>';
     pop.classList.add('show'); setTimeout(preview, 30);
   }
@@ -282,53 +363,52 @@
     const row = (label, data) => '<button class="mini" ' + data + '>➕ ' + esc(label) + '</button>';
     return '<h3>🧩 ' + T('Tokens onto the open scene') + '</h3>' +
       '<p><b>🧙 ' + T('Heroes') + ':</b> ' + (P.length ? P.map(c => row(c.name, 'data-act="scTok" data-k="h" data-id="' + esc(c.id) + '"')).join(' ') + ' ' + row(T('all heroes'), 'data-act="scTok" data-k="hall"') : '<small>' + T('No heroes in the party yet.') + '</small>') + '</p>' +
-      '<p><b>👹 ' + T('Monsters') + ':</b> ' + (M.length ? M.map((m, i) => row(m.name + (m.fight ? ' ⚔️' : ''), 'data-act="scTok" data-k="m" data-i="' + i + '"')).join(' ') : '<small>' + T('Add monsters to a fight or a prepared fight first.') + '</small>') + '</p>' +
+      '<p><b>👹 ' + T('Monsters') + ':</b> ' + (M.length ? M.map((m, i) => row(m.name + (m.fight ? ' ⚔️' : ''), 'data-act="scTok" data-k="m" data-i="' + i + '"')).join(' ') : '') +
+      ' <small>' + T('Any monster: ⚔️ Combat → choose it → 🗺 Onto the scene.') + '</small></p>' +
       '<p><label class="inl"><input type="checkbox" data-on="scHide"' + (ST.hide ? ' checked' : '') + '> 🙈 ' + T('put monsters hidden (right click → Show when they appear)') + '</label></p>' +
       '<p class="btnrow"><button data-act="scLib">📚 ' + T('All heroes and monsters into Owlbear\'s library') + '</button></p>';
   }
   U.ON.scHide = el => { ST.hide = el.checked; };
+  U.ON.scDark = el => { ST.dark = el.checked; };
   U.ACT.scTok = async ds => {
     try {
       let list = [];
       if (ds.k === 'hall') list = party().map(c => ({ name: c.name, key: heroToken(c) }));
       else if (ds.k === 'h') { const c = U.byId(ds.id); if (c) list = [{ name: c.name, key: heroToken(c) }]; }
-      else { const m = allMonsters()[Number(ds.i)]; if (m) list = [{ name: m.name, key: m.key, hidden: ST.hide }]; }
-      const n = await toScene(list); msg('✅ ' + T('On the scene: {0}. They link to the fight by their names.', n));
+      else { const m = allMonsters()[Number(ds.i)]; if (m) list = [{ name: m.name, key: m.key, hidden: ST.hide, meta: m.mid ? { 'dndtable/mon': { mid: m.mid } } : {} }]; }
+      const n = await toScene(list); msg('✅ ' + T('On the scene: {0}. They link to the fight by their names.', n)); readSoon();
     } catch (e) { msg('⚠️ ' + esc(e.message || e)); }
   };
   U.ACT.scLib = async () => {
     try { msg('⏳ ' + T('Uploading…')); const n = await toLibrary(party(), allMonsters(), true); msg('✅ ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); }
     catch (e) { msg('⚠️ ' + esc(e.message || e)); console.warn(e); }
   };
-  U.ACT.scAll = async () => {
-    await U.ACT.scUpload(); const m0 = (document.getElementById('scMsg') || {}).innerHTML || '';
-    if (/⚠️/.test(m0)) return;
-    try { const n = await toLibrary(party(), allMonsters(), false); msg(m0 + '<br>📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); }
-    catch (e) { msg(m0 + '<br>⚠️ ' + esc(e.message || e)); }
-  };
   const msg = h => { const m = document.getElementById('scMsg'); if (m) m.innerHTML = h; };
   U.ACT.scenes = () => scenesPop();
-  U.ACT.scType = ds => { ST.type = ds.v; ST.name = ''; scenesPop(); };
-  U.ACT.scSize = ds => { ST.size = ds.v; scenesPop(); };
-  U.ACT.scNew = () => { ST.seed = 1 + Math.floor(Math.random() * 9999); ST.name = ''; scenesPop(); };
-  U.ON.scSeed = el => { ST.seed = Math.max(1, Number(el.value) || 1); ST.name = ''; scenesPop(); };
-  U.ON.scEnc = el => { ST.enc = el.value; preview(); };
+  U.ACT.scMap = ds => { ST.map = ds.v; scenesPop(); };
   U.ON.scHeroes = el => { ST.heroes = el.checked; preview(); };
-  U.ON.scFog = el => { ST.fog = el.checked; };
-  U.ON.scWalls = el => { ST.walls = el.checked; };
-  U.IN.scName = el => { ST.name = el.value; };
+  async function uploadMap(m) {
+    const map = mapOf(m); const dark = m.type === 'dungeon' && ST.dark;
+    const tokens = [];
+    if (ST.heroes) { const hs = map.heroSpots(party().length); party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false, light: dark }); }); }
+    const blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9));
+    return upload({ name: mapName(m), mapBlob: blob, cellPx: map.P, tokens, walls: dark ? map.walls : [], fog: dark });
+  }
   U.ACT.scUpload = async () => {
+    const m = MAPS.find(x => x.id === ST.map) || MAPS[0];
     try {
-      msg('⏳ ' + T('Uploading…'));
-      const map = lastMap || U.makeMap(ST.type, ST.size, ST.seed, 80);
-      const enc = S.encounters.find(e => e.id === ST.enc); const mons = encTokens(enc); const ms = map.spots(mons.length);
-      const tokens = mons.map((m, i) => ({ name: m.name, key: m.key, x: ms[i][0], y: ms[i][1], hidden: true }));
-      if (ST.heroes) { const hs = map.heroSpots(party().length); party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false }); }); }
-      const blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9));
-      const r = await upload({ name: ST.name || 'Scene', mapBlob: blob, cellPx: map.P, tokens, walls: ST.walls ? map.walls : [], fog: ST.fog });
-      msg('✅ ' + T('Done! Owlbear → Scenes (top left) → open «{0}».', esc(ST.name)) + (r === 'nowalls' ? ' ' + T('(Owlbear did not take the walls — the scene is without them.)') : '') +
-        (enc ? '<br>' + T('Then: ⚔️ Fight → Prepared fights → «{0}» → load it. The tokens link by their names.', esc(enc.name)) : ''));
+      msg('⏳ ' + T('Uploading…')); const r = await uploadMap(m);
+      let n = 0; try { n = await toLibrary(party(), allMonsters(), false); } catch (e) {}
+      msg('✅ ' + T('Done! Owlbear → Scenes (top left) → open «{0}».', esc(mapName(m))) + (r === 'plain' ? ' ' + T('(Owlbear did not take the walls / lights — the scene is without them.)') : '') + (n ? '<br>📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n) : ''));
     } catch (e) { msg('⚠️ ' + esc(e.message || e)); console.warn(e); }
+  };
+  U.ACT.scAllMaps = async () => {
+    const done = [];
+    try {
+      for (const m of MAPS) { msg('⏳ ' + T('Uploading…') + ' ' + (done.length + 1) + ' / ' + MAPS.length + ' — ' + esc(mapName(m))); await uploadMap(m); done.push(mapName(m)); }
+      let n = 0; try { n = await toLibrary(party(), allMonsters(), false); } catch (e) {}
+      msg('✅ ' + T('{0} scenes are in Owlbear → Scenes (top left).', done.length) + '<br>' + done.map(esc).join(' · ') + (n ? '<br>📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n) : ''));
+    } catch (e) { msg('⚠️ ' + esc(e.message || e) + (done.length ? '<br>' + T('Uploaded before the error: {0}', done.map(esc).join(', ')) : '')); console.warn(e); }
   };
   // the party onto the scene that is open now (next to the middle of the screen)
   U.ACT.scHeroes = async () => {
@@ -381,7 +461,7 @@
         party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false }); });
       }
       const r = await upload({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: map && s.walls !== false ? map.walls : [], fog: s.fog !== false });
-      log.push('🗺 ' + esc(s.name || '') + (r === 'nowalls' ? ' ' + T('(no walls)') : ''));
+      log.push('🗺 ' + esc(s.name || '') + (r === 'plain' ? ' ' + T('(no walls)') : ''));
     }
     try { const n = await toLibrary(party(), allMonsters(), false); if (n) log.push('📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); } catch (e) { console.warn(e); }
     U.render(); scenesPop(); msg('✅ ' + T('Scenario «{0}» loaded:', esc(sc.name || '')) + '<br>' + log.join('<br>'));

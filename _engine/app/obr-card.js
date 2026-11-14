@@ -370,7 +370,7 @@ export function startCard(OBR, opts) {
     async function send(req) {
       let player = ''; try { player = await OBR.player.getName(); } catch (er) {}
       const hero = lastCtx && lastCtx.hero;
-      req = Object.assign({ id: Math.random().toString(36).slice(2, 10), t: Date.now(), cid: hero ? hero.cid : '', atok: lastCtx && lastCtx.myTok ? lastCtx.myTok.id : '', ttok: item && lastCtx && lastCtx.kind !== 'point' ? item.id : '', mode, from: hero ? hero.n : '', player }, req);
+      req = Object.assign({ id: Math.random().toString(36).slice(2, 10), t: Date.now(), cid: hero ? hero.cid : '', atok: lastCtx && lastCtx.myTok ? lastCtx.myTok.id : '', ttok: item && lastCtx && lastCtx.kind !== 'point' ? item.id : '', ft: lastCtx && lastCtx.kind !== 'point' && lastCtx.ft != null ? lastCtx.ft : undefined, mode, from: hero ? hero.n : '', player }, req);
       try { await OBR.broadcast.sendMessage(CH, { type: 'act', req }); note = '⏳ ' + tr('Sent to the DM — the result shows up in the roll log.', 'Отправлено мастеру — результат появится в журнале бросков.'); }
       catch (er) { note = '⚠️ ' + esc(er.message || er); }
       mode = 'normal'; view = null; set('obrAim', null); await clearPreview(); render();

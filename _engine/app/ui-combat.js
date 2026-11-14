@@ -17,7 +17,7 @@
     return S.monsters.map(normMon).concat(built);
   }
   const monById = id => allMonsters().find(m => m.id === id);
-  U.allMonsters = allMonsters; U.monById = monById; // the scene maker (obr-scenes.js) needs them
+  U.allMonsters = allMonsters; U.monById = monById; U.addMonEntry = (m, q) => addMon(m, q); U.atCr = (m, cr) => atCr(m, cr); // the scene maker (obr-scenes.js) needs them
   const crInfo = cr => D.CR_TABLE[String(cr)] || null;
   // "CR 1/2 (0.5)" + what it means for the heroes
   const crDec = cr => (String(cr).indexOf('/') > 0 ? ' (' + D.crNum(cr) + ')' : '');
@@ -218,7 +218,8 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       monSelect('monSel', mons, T('Monster…')) +
       '<select id="monCr" title="' + esc(T('Make it stronger or weaker (the numbers balance themselves)')) + '">' + opt('', T('CR as in D&D'), '') + D.CR_LIST.map(cr => opt(cr, crShort(cr) + ' — ' + crHint(cr), '')).join('') + '</select>' +
       '<input id="monQty" type="number" min="1" max="20" value="1" class="tiny" title="' + esc(T('How many')) + '"><button data-act="cbAddMon">' + T('＋ Add') + '</button>' +
-      '<button data-act="cTab" data-v="monsters">' + T('✎ Make a custom monster') + '</button></div>';
+      (U.obrToScene ? '<button data-act="cbToScene" title="' + esc(T('Put its token on the Owlbear scene (hidden or not — see 🗺)')) + '">🗺 ' + T('Onto the scene') + '</button>' : '') +
+      '<button data-act="cTab" data-v="monsters">' + T('✎ Make a custom monster') + '</button></div>' + (U.sceneBox ? U.sceneBox() : '');
 
     const monsIn = list.filter(x => x.type === 'mon');
     if (monsIn.length) { const df = difficulty(monsIn.map(x => ({ m: { cr: x.cr || (monById(x.srcId) || {}).cr }, qty: 1 }))); h += '<div class="diffline ' + df.cls + '">' + T('Difficulty') + ' ' + ib('difficulty') + ': ' + df.txt + '</div>'; }
@@ -309,7 +310,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     return '<div class="detail balrow"><b>⚖️ ' + T('Strength (CR)') + '</b> ' + ib('cr') + ' ' + crSelect('prevCr', cr, ' data-on="monPrevCr"') +
       '<br><small>' + T('In D&D this monster is {0}. Pick any other CR: the numbers below balance themselves (your party: level {1}).', crShort(m.cr), partyLevel()) + '</small></div>' +
       statBlock(shown) +
-      '<p class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + (cr !== m.cr ? ' (' + crShort(cr) + ')' : '') + '</button>' +
+      '<p class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + (cr !== m.cr ? ' (' + crShort(cr) + ')' : '') + '</button>' + (U.obrToScene ? '<button data-act="monToScene" data-id="' + m.id + '">🗺 ' + T('Onto the scene') + '</button>' : '') +
       '<button data-act="monCopy" data-id="' + m.id + '">' + T('Copy to my monsters & edit') + '</button></p>';
   }
   function newMonsterForm(mons) {
@@ -338,7 +339,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
   }
   function monEditor(m) {
     const f = (k, label, type, w) => '<label class="inl">' + label + ' <input ' + (type ? 'type="' + type + '" ' : '') + (w ? 'style="width:' + w + '" ' : '') + 'data-on="monSet" data-id="' + m.id + '" data-f="' + k + '" value="' + esc(m[k] == null ? '' : m[k]) + '"></label>';
-    let h = '<div class="detail"><div class="ph"><h2>✎ ' + esc(m.name) + '</h2><div class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + '</button><button data-act="monDup" data-id="' + m.id + '">' + T('Copy') + '</button><button class="danger" data-act="monDel" data-id="' + m.id + '">' + T('Delete') + '</button></div></div>' +
+    let h = '<div class="detail"><div class="ph"><h2>✎ ' + esc(m.name) + '</h2><div class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + '</button>' + (U.obrToScene ? '<button data-act="monToScene" data-id="' + m.id + '">🗺 ' + T('Onto the scene') + '</button>' : '') + '<button data-act="monDup" data-id="' + m.id + '">' + T('Copy') + '</button><button class="danger" data-act="monDel" data-id="' + m.id + '">' + T('Delete') + '</button></div></div>' +
       '<p class="hint">' + T('Changes save automatically.') + '</p>' +
       f('name', T('Name'), '', '14em') + f('ac', T('AC'), 'number', '4em') + f('hp', T('HP'), 'number', '5em') + f('speed', T('Speed'), '', '7em') + f('multi', T('Attacks per turn'), 'number', '4em') +
       '<label class="inl">' + T('Type') + ' <select data-on="monSet" data-id="' + m.id + '" data-f="type">' + opt('', '—', m.type || '') + Object.keys(D.MON_TYPES || {}).map(k => opt(k, D.MON_TYPES[k].icon + ' ' + D.MON_TYPES[k].name, m.type || '')).join('') + '</select></label>' +
@@ -515,6 +516,8 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     monDup: ds => { const m = E.clone(myMon(ds.id)); m.id = E.uid(); m.name += ' ' + T('(copy)'); S.monsters.unshift(m); S.monSel = m.id; commitMon(); },
     monDel: ds => { if (!confirm(T('Delete this monster?'))) return; S.monsters = S.monsters.filter(m => m.id !== ds.id); S.monSel = null; commitMon(); },
     monToFight: ds => { const m0 = monById(ds.id); addMon(m0.builtin ? atCr(m0, S.monPrevCr) : m0, 1); U.saveCombat(); U.toast(T('Added to the fight.')); },
+    monToScene: ds => { const m0 = monById(ds.id); if (U.obrToScene) U.obrToScene(m0.builtin ? atCr(m0, S.monPrevCr) : m0, 1); },
+    cbToScene: () => { const id = document.getElementById('monSel').value; if (!id) { U.toast(T('Choose a monster first.')); return; } const q = Math.max(1, Math.min(20, Number(document.getElementById('monQty').value) || 1)); const cr = (document.getElementById('monCr') || {}).value || ''; if (U.obrToScene) U.obrToScene(atCr(monById(id), cr), q); },
     monAtkAdd: ds => { myMon(ds.id).attacks.push({ n: T('Attack'), hit: 3, d: '1d6+1', t: 'slashing' }); commitMon(); },
     monAtkDel: ds => { myMon(ds.id).attacks.splice(Number(ds.i), 1); commitMon(); },
     monAbAdd: ds => { myMon(ds.id).abilities.push({ id: E.uid(), n: T('Special ability'), kind: 'save', s: 'DEX', dc: 12, d: '2d6', t: 'fire', half: true, area: false, uses: 0, recharge: 0, desc: '' }); commitMon(); },

@@ -286,7 +286,8 @@
     if (!OBR || !tid || tid === '__all') return { ok: true, mode: q.mode };
     const cb = S.combat; const target = cb.list.find(x => x.id === tid); const r = rIn || rangeOf(a);
     if (!target || !r || target.id === actor.id) return { ok: true, mode: q.mode };
-    const ft = await feetBetween(actor, target, q.atok, tid === (q.tids && q.tids.length > 1 ? null : q.tid) ? q.ttok : null);
+    // the token window already measured it and only lets you click when it is in reach → trust that number (no second, different measure)
+    const ft = q.ft != null && tid === q.tid ? Number(q.ft) : await feetBetween(actor, target, q.atok, tid === (q.tids && q.tids.length > 1 ? null : q.tid) ? q.ttok : null);
     if (ft == null) return { ok: true, mode: q.mode, note: T('(distance not checked: put both tokens on the map and link them)') };
     const tn = U.cbTarget(target) ? U.cbTarget(target).name : target.name || '';
     if (r.k === 'melee' && ft > r.n) return { ok: false, msg: T('Too far: {0} is {1} ft away, you reach {2} ft. Walk closer first.', tn, ft, r.n) };
@@ -346,7 +347,7 @@
       if ((b === 'grapple' || b === 'shove' || b === 'help') && !tg) return refuse(q, T('Choose a target first.'));
       let note = '';
       if (b === 'grapple' || b === 'shove') {
-        const ft = await feetBetween(actor, tcb, q.atok, q.ttok); if (ft != null) note = '📏 ' + ft + ' ' + T('ft');
+        const ft = q.ft != null ? Number(q.ft) : await feetBetween(actor, tcb, q.atok, q.ttok); if (ft != null) note = '📏 ' + ft + ' ' + T('ft');
         if (ft != null && bad(ft > 5, T('Too far: {0} is {1} ft away, you reach {2} ft. Walk closer first.', tg.name, ft, 5))) return '';
       }
       ec[k]++; const top = S.log[0];
