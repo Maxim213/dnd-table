@@ -266,6 +266,8 @@ export function startBackground(OBR, by) {
       if (aim && Date.now() - (aim.t || 0) < 15 * 60000) { set('obrAim', Object.assign({}, aim, { point: ev.pointerPosition, t: Date.now() })); return; } // placing an area: move it here
       let tg = ev.target || null;
       if (tg && tg.layer !== 'CHARACTER') tg = tg.attachedTo ? { id: tg.attachedTo } : null; // a ring / a tag → its token; the map → a point
+      const fight = get(DM ? 'obrdm' : 'obrstate', null);
+      if (!tg && !(fight && fight.on)) { try { await OBR.popover.close(POP_ID); } catch (e) {} return; } // the floor outside a fight: nothing to do there
       await openPop(tg ? { id: tg.id, point: null } : { id: '', point: ev.pointerPosition }, ev.pointerPosition);
     }
     // dragging: the token follows the mouse only on this screen (interaction); on release it really moves — if the move is allowed

@@ -120,7 +120,7 @@ export function startCard(OBR, opts) {
     // ---------- render ----------
     async function render() {
       if (busy) return; busy = true;
-      try { el.innerHTML = await build() + (note ? '<p class="tc-msg">' + note + '</p>' : ''); }
+      try { let h = await build() + (note ? '<p class="tc-msg">' + note + '</p>' : ''); if (POP && h.indexOf('data-do="close"') < 0) h = '<div class="tc-topx"><button data-do="close" title="' + tr('Close', 'Закрыть') + '">✕</button></div>' + h; el.innerHTML = h; }
       catch (e) { el.innerHTML = '<p class="tc-msg">⚠️ ' + esc(e.message || e) + '</p>'; console.warn(e); }
       finally { busy = false; }
     }
@@ -196,7 +196,9 @@ export function startCard(OBR, opts) {
     let lastCtx = null; // for clicks: { f, meIn, hero, ft, tEntry, kind, myB, toks }
     async function fightWindow(f, lk) {
       const menu = get('obrmenu', []); const mine = new Set(menu.map(m => m.cid));
-      const meIn = (f.list || []).find(x => x.cid && mine.has(x.cid));
+      // a player with several heroes: the one whose turn it is acts; off-turn — the one he clicked, else the first
+      const mineIn = (f.list || []).filter(x => x.cid && mine.has(x.cid)); const cur = f.list[f.turn];
+      const meIn = mineIn.find(x => cur && x.id === cur.id) || (lk && lk.k === 'pc' ? mineIn.find(x => x.cid === lk.cid) : null) || mineIn[0];
       if (!meIn) return '';
       const hero = menu.find(m => m.cid === meIn.cid); if (!hero) return '';
       await grid();
@@ -221,7 +223,7 @@ export function startCard(OBR, opts) {
       else if (kind === 'ally') h = head(heroInfo(tEntry.cid).pic, tEntry.n, '❤️ ' + tEntry.hp + ' / ' + tEntry.mx + (ft != null ? ' · 📏 ' + ft + ' ' + tr('ft', 'фт') : ''));
       else { const s = ST[tEntry.st] || ST.ok; h = head('', tEntry.n, s[2] + ' ' + (ruOn() ? s[1] : s[0]) + (ft != null ? ' · 📏 ' + ft + ' ' + tr('ft', 'фт') : '')); }
       h += conds(kind === 'point' ? [] : tEntry.cond);
-      h += '<div class="tc-turn">' + (myTurn ? '⚔️ <b>' + tr('Your turn', 'Твой ход') + '</b>' : '⏳ ' + tr('Not your turn — reactions only', 'Не твой ход — только реакция')) + ' · ' +
+      h += '<div class="tc-turn">' + (myTurn ? '⚔️ <b>' + tr('Your turn', 'Твой ход') + '</b> — ' + esc(hero.n) : '⏳ ' + tr('Not your turn — reactions only', 'Не твой ход — только реакция')) + ' · ' +
         ['a', 'b', 'r'].map(k => '<span class="tc-ec' + (ec[k] ? ' used' : '') + '">' + COST[k][0] + '</span>').join('') +
         ' · 🚶 ' + tr('left', 'осталось') + ' ' + left + ' ' + tr('ft', 'фт') + (strict ? '' : ' · 🕊 ' + tr('free rules', 'свободные правила')) + '</div>';
       if (kind === 'self') h += '<div class="tc-move">🚶 ' + (myTurn ? tr('You can still walk', 'Можно пройти ещё') + ' <b>' + left + ' ' + tr('ft', 'фт') + '</b> (' + Math.floor(left / G.mult) + ' ' + tr('squares', 'клет.') + ') ' + tr('of', 'из') + ' ' + mvMax + '.<br><small>' +

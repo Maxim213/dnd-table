@@ -210,10 +210,13 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
   function viewFight() {
     const cb = S.combat; const list = cb.list; const active = cb.turn >= 0 ? list[cb.turn] : null;
     const mons = allMonsters();
+    const live = cb.turn >= 0;
+    // a fight going on: only what you need now (next turn, round); adding people and the tools are folded below
     let h = '<div class="ph"><h1>' + T('Fight') + ' ' + ib('combat') + '</h1><div class="btnrow">' +
-      (cb.turn < 0 ? '<button class="primary" data-act="cbStart">' + T('▶ Start combat') + '</button>' : '<button class="primary" data-act="cbNext">' + T('Next turn ▶') + '</button><span class="round">' + T('Round') + ' <b>' + cb.round + '</b></span>') +
-      '<button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button><button data-act="cbSavePrep" title="' + esc(T('Save these monsters as a prepared fight')) + '">' + T('📋 Save as prepared') + '</button><button data-act="cbPractice">' + T('Practice fight') + '</button><button class="danger" data-act="cbClear">' + T('Clear') + '</button></div></div>';
-    h += U.monFilterBar(mons) + '<div class="addrow cbadd">' +
+      (!live ? '<button class="primary" data-act="cbStart">' + T('▶ Start combat') + '</button><button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button>'
+        : '<button class="primary" data-act="cbNext">' + T('Next turn ▶') + '</button><span class="round">' + T('Round') + ' <b>' + cb.round + '</b></span>') + '</div></div>';
+    let setup = '<div class="btnrow">' + (live ? '<button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button>' : '') + '<button data-act="cbSavePrep" title="' + esc(T('Save these monsters as a prepared fight')) + '">' + T('📋 Save as prepared') + '</button><button data-act="cbPractice">' + T('Practice fight') + '</button><button class="danger" data-act="cbClear">' + (live ? T('⏹ End the fight') : T('Clear')) + '</button></div>';
+    setup += U.monFilterBar(mons) + '<div class="addrow cbadd">' +
       '<select data-on="cbAddPc"><option value="">' + T('＋ Add character…') + '</option>' + S.chars.filter(c => !list.some(x => x.charId === c.id)).map(c => opt(c.id, c.name || T('Unnamed'), '')).join('') + '</select>' +
       monSelect('monSel', mons, T('Monster…')) +
       '<select id="monCr" title="' + esc(T('Make it stronger or weaker (the numbers balance themselves)')) + '">' + opt('', T('CR as in D&D'), '') + D.CR_LIST.map(cr => opt(cr, crShort(cr) + ' — ' + crHint(cr), '')).join('') + '</select>' +
@@ -222,7 +225,8 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       '<button data-act="cTab" data-v="monsters">' + T('✎ Make a custom monster') + '</button></div>' + (U.sceneBox ? U.sceneBox() : '');
 
     const monsIn = list.filter(x => x.type === 'mon');
-    if (monsIn.length) { const df = difficulty(monsIn.map(x => ({ m: { cr: x.cr || (monById(x.srcId) || {}).cr }, qty: 1 }))); h += '<div class="diffline ' + df.cls + '">' + T('Difficulty') + ' ' + ib('difficulty') + ': ' + df.txt + '</div>'; }
+    if (monsIn.length) { const df = difficulty(monsIn.map(x => ({ m: { cr: x.cr || (monById(x.srcId) || {}).cr }, qty: 1 }))); setup += '<div class="diffline ' + df.cls + '">' + T('Difficulty') + ' ' + ib('difficulty') + ': ' + df.txt + '</div>'; }
+    h += live ? '<details class="cbsetup"' + (S.cbSetupOpen ? ' open' : '') + '><summary data-act="cbSetupToggle">➕ ' + T('Add to the fight · scene · tools') + '</summary>' + setup + '</details>' : setup;
 
     h += '<div class="cbwrap"><div class="cblist">' + (list.length ? list.map((x, i) => {
       const v = cbView(x); if (!v) return '';
@@ -256,7 +260,8 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
         (hasArea ? opt('__all', active.type === 'pc' ? T('⚡ All monsters (area — saves only)') : T('⚡ All characters (area — saves only)'), tgt) : '') +
         allT.filter(x => x.id !== active.id && cbView(x)).map(x => { const tv = cbView(x); return opt(x.id, tv.name + ' (' + T('AC') + ' ' + tv.ac + ', ' + tv.hp + ' ' + T('HP') + ')', tgt); }).join('') + opt(active.id, T('Self'), tgt) + '</select></label>' +
         '<p class="hint">' + T('Each button shows the chance to hit (or that the target fails its save) and the average damage ≈.') + ' ' + ib('hitchance') + ' ' + ib('savechance') + '</p>';
-      h += U.econChips(active.econ) + '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + '"' + (a.blocked ? ' disabled' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
+      const spentK = a => { const k = U.actCost(a); return k !== '-' && active.econ && active.econ[k] >= 1; };
+      h += U.econChips(active.econ) + '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + (spentK(a) ? ' spent' : '') + '"' + (a.blocked ? ' disabled' : '') + (spentK(a) ? ' title="' + esc(T('Already used this turn — the app will ask first')) + '"' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
         oddsLine(a, active, tcb, enemies, ctx) + '</small></button>').join('') + '</div>';
       if (active.type === 'mon') {
         if (active.multi) h += '<p class="hint">' + T('Multiattack: {0} attacks per turn.', active.multi) + '</p>';
@@ -436,6 +441,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       S.combat.turn = tt; startTurn(L[tt]); U.saveCombat(); U.render();
     },
     cbTurn: ds => { S.combat.turn = Number(ds.i); if (!S.combat.round) S.combat.round = 1; U.saveCombat(); U.render(); },
+    cbSetupToggle: () => { S.cbSetupOpen = !S.cbSetupOpen; U.render(); },
     cbClear: () => { if (!confirm(T('Remove everyone from the fight?'))) return; S.combat = { list: [], round: 0, turn: -1, target: {} }; U.saveCombat(); U.render(); },
     cbDel: ds => { const L = S.combat.list; const i = L.findIndex(x => x.id === ds.id); L.splice(i, 1); if (S.combat.turn >= L.length) S.combat.turn = L.length ? 0 : -1; else if (i < S.combat.turn) S.combat.turn--; U.saveCombat(); U.render(); },
     cbDmg: ds => { const x = S.combat.list.find(y => y.id === ds.id); const n = Number(document.getElementById('amt-' + ds.id).value) || 0; if (!n) return; const tg = U.cbTarget(x); const before = tg.hpNow(); const notes = tg.damage(n); U.logAdd(tg.name, [T('takes {0} damage', '<b class="big dmg">' + n + '</b>') + ' · ' + T('HP {0} → {1}', before, tg.hpNow()) + U.notesTxt(notes)]); U.render(); },
@@ -456,7 +462,9 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       };
       // turn economy: what this costs; the DM may still click it (only a warning), players' requests are checked before (online.js)
       const econ = active.econ = active.econ || U.econNew();
-      const spend = a => { const k = ds.cost || U.actCost(a); if (k !== '-' && econ[k] >= 1 && !ds.remote) U.toast('⚠️ ' + T('Already used this turn: {0}. (You are the DM — it still works.)', T(ECON_NAME[k]))); if (k !== '-') econ[k] = (econ[k] || 0) + 1; };
+      // the DM clicks something already used this turn: by the rules it can't happen — ask first (players' requests are checked in online.js)
+      const okToSpend = a => { const k = ds.cost || U.actCost(a); if (ds.remote || ds.quiet || k === '-' || !(econ[k] >= 1)) return true; return confirm(T('{0} is already used this turn. By the rules {1} cannot do this now. Do it anyway?', T(ECON_NAME[k]), active.type === 'pc' ? (U.byId(active.charId) || {}).name || '' : active.name)); };
+      const spend = a => { const k = ds.cost || U.actCost(a); if (k !== '-' && econ[k] >= 1 && ds.quiet) U.toast('⚠️ ' + T('Already used this turn: {0}. (You are the DM — it still works.)', T(ECON_NAME[k]))); if (k !== '-') econ[k] = (econ[k] || 0) + 1; };
       // several chosen targets (Bless, Magic Missile darts split between them, an area placed on the map): ds.tids
       const tl = Array.isArray(ds.tids) ? ds.tids.map(id => cb.list.find(x => x.id === id)).filter(Boolean).map(U.cbTarget).filter(Boolean) : null;
       const res = (a, att) => {
@@ -467,6 +475,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       };
       if (active.type === 'pc') {
         const c = U.byId(active.charId); const d = E.compute(c); let a = d.actions.find(x => x.id === ds.aid); if (!a) return;
+        if (!okToSpend(a)) return;
         if (ds.one) a = Object.assign({}, a, { count: 1 }); // a reaction attack (opportunity attack) is ONE attack
         const w = U.spendFor(c, d, a); who = c.name;
         if (/⚠️/.test(w)) { U.toast(w); return; }
@@ -474,7 +483,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
         lines = ['<b>' + esc(a.name) + '</b>' + (w ? ' <small>(' + w + ')</small>' : '')].concat(res(a, U.attackerOf(c)));
         U.saveChars();
       } else {
-        const a = monActions(active).find(x => x.id === ds.aid); if (!a || a.blocked) return; who = active.name; spend(a);
+        const a = monActions(active).find(x => x.id === ds.aid); if (!a || a.blocked) return; if (!okToSpend(a)) return; who = active.name; spend(a);
         if (a.abId) {
           const ab = active.abilities.find(x => x.id === a.abId);
           active.used = active.used || {}; active.used[ab.id] = (active.used[ab.id] || 0) + 1;

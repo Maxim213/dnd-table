@@ -21,7 +21,7 @@
           '<button data-act="exportChar" data-id="' + c.id + '">' + T('📤 Export for player') + '</button>' +
           '<button class="' + (c.party ? 'on' : '') + '" data-act="toggleParty" data-id="' + c.id + '" title="' + esc(T('Added automatically when you start a prepared fight')) + '">' + (c.party ? T('✓ In party') : T('Not in party')) + '</button>' +
           '<button data-act="dupChar" data-id="' + c.id + '">' + T('Copy') + '</button>' +
-          '<button class="danger" data-act="delChar" data-id="' + c.id + '">' + T('Delete') + '</button>';
+          '<button class="danger" data-act="delChar" data-id="' + c.id + '">' + T('Delete') + '</button>' + (U.obrHeroToScene ? '<button data-act="heroToScene" data-id="' + c.id + '">🗺 ' + T('Onto the scene') + '</button>' : '');
       return '<div class="ccard">' + U.portrait(c, d, 'sm') +
         '<div class="cc-body"><div class="cc-name">' + esc(c.name || T('Unnamed hero')) + (c.dmLocked && U.PLAYER ? ' <span class="tag">' + T('from DM') + '</span>' : '') + '</div>' +
         '<div class="cc-sub">' + T('Level {0}', c.level) + ' ' + esc(sub || T('(not finished)')) + '</div>' +

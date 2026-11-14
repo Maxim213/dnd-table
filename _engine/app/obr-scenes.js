@@ -267,6 +267,18 @@
     } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); }
   };
 
+  // "🗺 Onto the scene" on a hero's card in 🧙 Characters (linked to the hero at once)
+  U.obrHeroToScene = true;
+  U.ACT.heroToScene = async ds => {
+    const c = U.byId(ds.id); if (!c) return;
+    try {
+      const on = (await OBR.scene.items.getItems(it => it.layer === 'CHARACTER' && it.metadata && it.metadata['dndtable/link'] && it.metadata['dndtable/link'].cid === c.id)).length;
+      if (on && !confirm(T('{0} is already on the scene. Put one more?', c.name))) return;
+      await toScene([{ name: c.name, key: heroToken(c), meta: { 'dndtable/link': { k: 'pc', cid: c.id, n: c.name } } }]);
+      U.toast('🗺 ' + T('{0} is on the scene (middle of your screen).', esc(c.name))); readSoon();
+    } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); }
+  };
+
   // ---------- who is on the open scene (the fight screen shows it) → "⚔️ Fight with everyone on the scene" ----------
   let sceneToks = [];
   async function readScene() {
@@ -332,7 +344,7 @@
     { id: 'f4', type: 'forest', seed: 6100, en: 'Wolf Thicket', ru: 'Волчья чаща', opts: { dense: true, noPath: true } }
   ];
   const mapName = m => (U.LANG === 'ru' ? m.ru : m.en);
-  const ST = { map: 'd1', heroes: true, hide: true, dark: true };
+  const ST = { map: 'd1', heroes: true, hide: true, dark: false };
   const made = {};
   const mapOf = m => made[m.id] || (made[m.id] = U.makeMap(m.type, 'l', m.seed, 80, m.opts));
   function preview() {
@@ -351,7 +363,7 @@
       '<p><b>🌲 ' + T('Forests') + ':</b> ' + MAPS.filter(m => m.type === 'forest').map(btn).join(' ') + '</p>' +
       '<canvas id="scPrev" width="520" height="360" style="width:100%;border-radius:8px;border:1px solid #5a4630;background:#111"></canvas>' +
       '<p><label class="inl"><input type="checkbox" data-on="scHeroes"' + (ST.heroes ? ' checked' : '') + '> 🧙 ' + T('the party\'s heroes at the entrance') + ' 🔵</label> ' +
-      '<label class="inl"><input type="checkbox" data-on="scDark"' + (ST.dark ? ' checked' : '') + '> 🌑 ' + T('dungeons are dark: fog, walls and a 40 ft light on each hero') + '</label></p>' +
+      '<label class="inl"><input type="checkbox" data-on="scDark"' + (ST.dark ? ' checked' : '') + '> 🌑 ' + T('dark dungeons (fog: the players see only the light of their heroes — ONLY with the Dynamic Fog extension in the room)') + '</label></p>' +
       '<p class="hint">' + T('Dark dungeon: the players see only what their heroes light up — that needs Owlbear\'s Dynamic Fog extension (add it to the room). For you the dark looks grey: that is normal.') + '</p>' +
       '<p class="btnrow"><button class="primary" data-act="scUpload">📦 ' + T('Upload «{0}»', esc(mapName(cur))) + '</button> <button data-act="scAllMaps">📦📦 ' + T('Import all maps') + '</button> <button data-act="scFolder">📁 ' + T('Scenario from a folder…') + '</button></p>' +
       '<p class="hint" id="scMsg"></p>' + tokenList() + '</div>';
@@ -388,11 +400,11 @@
   U.ACT.scMap = ds => { ST.map = ds.v; scenesPop(); };
   U.ON.scHeroes = el => { ST.heroes = el.checked; preview(); };
   async function uploadMap(m) {
-    const map = mapOf(m); const dark = m.type === 'dungeon' && ST.dark;
+    const map = mapOf(m); const dun = m.type === 'dungeon'; const dark = dun && ST.dark; // walls + lights always (harmless), the fog only when asked
     const tokens = [];
-    if (ST.heroes) { const hs = map.heroSpots(party().length); party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false, light: dark }); }); }
+    if (ST.heroes) { const hs = map.heroSpots(party().length); party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false, light: dun }); }); }
     const blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9));
-    return upload({ name: mapName(m), mapBlob: blob, cellPx: map.P, tokens, walls: dark ? map.walls : [], fog: dark });
+    return upload({ name: mapName(m), mapBlob: blob, cellPx: map.P, tokens, walls: dun ? map.walls : [], fog: dark });
   }
   U.ACT.scUpload = async () => {
     const m = MAPS.find(x => x.id === ST.map) || MAPS[0];

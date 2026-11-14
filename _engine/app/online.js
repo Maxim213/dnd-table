@@ -517,7 +517,7 @@
     const active = cb.list[cb.turn]; if (!active) return '';
     if (q.tid) cb.target[active.id] = q.tid;
     S.mode = q.mode === 'adv' || q.mode === 'dis' ? q.mode : 'normal';
-    U.ACT.cbAct({ aid: q.aid }); S.mode = 'normal'; U.saveCombat(); U.render(); return '';
+    U.ACT.cbAct({ aid: q.aid, quiet: 1 }); S.mode = 'normal'; U.saveCombat(); U.render(); return '';
   }
   let actBusy = false;
   async function runActQueue() {
@@ -683,8 +683,8 @@
       h += '<div class="emptybig"><p>' + T('No fight right now. When the DM starts one, the order of turns shows up here.') + '</p></div>';
     } else {
       // my hero in this fight (the first one) acts; the clicked row is the target
-      const meIn = st.list.find(x => x.cid && mine.has(x.cid));
-      const actor = meIn ? (S.chars || []).find(c => c.id === (S.obrActor && mine.has(S.obrActor) ? S.obrActor : meIn.cid)) : null;
+      const meIn = st.list.find((x, i) => i === st.turn && x.cid && mine.has(x.cid)) || st.list.find(x => x.cid && mine.has(x.cid) && x.cid === S.obrActor) || st.list.find(x => x.cid && mine.has(x.cid)); // several heroes: whose turn it is
+      const actor = meIn ? (S.chars || []).find(c => c.id === meIn.cid) : null;
       const alive = x => x.k === 'pc' ? x.hp > 0 : x.st !== 'down';
       if (!st.list.some(x => x.id === S.obrTgt)) { const firstFoe = st.list.find(x => x.k === 'mon' && alive(x)); S.obrTgt = firstFoe ? firstFoe.id : ''; }
       h += '<p class="hint">' + T('Click a row to choose the target.') + '</p><div class="obrlist">' + st.list.map((x, i) => {
