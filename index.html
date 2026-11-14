@@ -87,8 +87,14 @@
       const list = [...html.matchAll(/<script src="(_engine\/[^"]+)"><\/script>/g)].map(m => m[1]);
       if (!list.length) throw new Error('No scripts found in DnD_Game_DM.html');
       // download all at once, run in order (async = false keeps the order of dynamically added scripts)
-      const all = list.concat('_engine/app/online.js', '_engine/app/obr-scenes.js').map(src => { const s = document.createElement('script'); s.src = src; s.async = false; return new Promise((ok, bad) => { s.onload = ok; s.onerror = () => bad(new Error('Cannot load ' + src)); document.body.appendChild(s); }); });
-      await Promise.all(all);
+      const files = list.concat('_engine/app/online.js', '_engine/app/obr-scenes.js');
+      const add = (src, ordered) => new Promise(ok => { const s = document.createElement('script'); s.src = src; s.async = !ordered ? true : false; s.onload = () => ok(true); s.onerror = () => { s.remove(); ok(false); }; document.body.appendChild(s); });
+      const res = await Promise.all(files.map(src => add(src, true)));
+      // a file that did not arrive (a network hiccup with ~40 files at once): try it again, up to 3 times, one by one
+      for (let i = 0; i < files.length; i++) {
+        for (let t = 1; !res[i] && t <= 3; t++) { say('<p>🔄 ' + files[i] + ' (' + t + ')</p>'); await new Promise(r => setTimeout(r, 600 * t)); res[i] = await add(files[i] + '?r=' + Date.now(), false); }
+        if (!res[i]) throw new Error('Cannot load ' + files[i] + ' — check the internet and press F5');
+      }
       UI.start();
       if (window.ONLINE_START) window.ONLINE_START();
     } catch (e) { console.error(e); say('<p>⚠️ ' + String(e.message || e) + '</p>'); }
