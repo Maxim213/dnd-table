@@ -132,7 +132,7 @@ export function startBackground(OBR, by) {
     let turnKey = get('obrTurnKey', '');
     const takeState = st => {
       if (DM) return;
-      set('obrstate', st || null); drawReachSoon();
+      set('obrstate', st || null); drawReachSoon(); if (visionApi) visionApi.soon();
       const mine = new Set(get('chars', []).map(c => c.id));
       const a = st && st.on && st.list && st.list[st.turn];
       const key = st && st.on ? st.round + ':' + st.turn : '';
@@ -242,6 +242,10 @@ export function startBackground(OBR, by) {
         }
       });
     } catch (e) { console.warn('context menu', e); }
+
+    // ---------- 👁 vision fog (obr-vision.js): what the party can see on the open scene ----------
+    var visionApi = null;
+    import('./obr-vision.js').then(m => { visionApi = m.startVision(OBR, { DM, get }); }).catch(e => console.warn('vision', e));
 
     // ---------- ⚔️ the D&D tool (Owlbear toolbar): click a token / the map → the token window; drag your token → a ruler with your movement ----------
     const TOOL = 'dndtable/tool', MODE = 'dndtable/mode', POP_ID = 'dndtable/pop', RULER = 'dndtable/ruler';

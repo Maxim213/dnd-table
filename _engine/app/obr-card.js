@@ -142,6 +142,7 @@ export function startCard(OBR, opts) {
       let out = head(h.pic, h.n, (h.lvl ? tr('Level', 'Уровень') + ' ' + h.lvl + ' · ' : '') + (h.ac != null ? tr('AC', 'КД') + ' ' + h.ac : ''));
       if (h.hp != null) out += bar(h.hp, h.mx) + '<div class="tc-sub">❤️ ' + h.hp + ' / ' + h.mx + '</div>';
       out += conds(h.cond);
+      if (h.mine || DM) out += lightRow(lk.cid);
       out += '<div class="tc-row">' + (h.mine || DM ? '<button data-do="sheet" data-id="' + esc(lk.cid) + '">📖 ' + tr('Open in the panel', 'Открыть в панели') + '</button>' : '') +
         (DM ? '<button data-do="target">🎯 ' + tr('Target', 'Цель') + '</button><button data-do="unlink">✂️ ' + tr('Unlink', 'Отвязать') + '</button>' : '') + '</div>';
       return out;
@@ -226,6 +227,7 @@ export function startCard(OBR, opts) {
       h += '<div class="tc-turn">' + (myTurn ? '⚔️ <b>' + tr('Your turn', 'Твой ход') + '</b> — ' + esc(hero.n) : '⏳ ' + tr('Not your turn — reactions only', 'Не твой ход — только реакция')) + ' · ' +
         ['a', 'b', 'r'].map(k => '<span class="tc-ec' + (ec[k] ? ' used' : '') + '">' + COST[k][0] + '</span>').join('') +
         ' · 🚶 ' + tr('left', 'осталось') + ' ' + left + ' ' + tr('ft', 'фт') + (strict ? '' : ' · 🕊 ' + tr('free rules', 'свободные правила')) + '</div>';
+      if (kind === 'self') h += lightRow(meIn.cid);
       if (kind === 'self') h += '<div class="tc-move">🚶 ' + (myTurn ? tr('You can still walk', 'Можно пройти ещё') + ' <b>' + left + ' ' + tr('ft', 'фт') + '</b> (' + Math.floor(left / G.mult) + ' ' + tr('squares', 'клет.') + ') ' + tr('of', 'из') + ' ' + mvMax + '.<br><small>' +
         tr('Hold your token with the ⚔️ D&D tool and drag: a green zone shows where you can get, the line shows what it costs. Or click the floor → «Walk here».', 'Зажми свой токен инструментом ⚔️ D&D и тяни: зелёная зона покажет, куда можешь дойти, линия — сколько потратишь. Или кликни по полу → «Идти сюда».') + '</small>'
         : tr('You walk on your turn: speed', 'Ходить можно в свой ход: скорость') + ' ' + (hero.speed || 30) + ' ' + tr('ft', 'фт')) + '</div>';
@@ -336,6 +338,20 @@ export function startCard(OBR, opts) {
       return h;
     }
 
+    // ---------- 🔦 the light a hero carries (the vision fog uses it: torch 40 ft, lantern 60 ft) ----------
+    function lightRow(cid) {
+      const c = get(gk('chars'), []).find(x => x.id === cid); if (!c) return '';
+      const L = [['torch', '🔥', tr('Torch 40 ft', 'Факел 40 фт')], ['lantern', '🏮', tr('Lantern 60 ft', 'Фонарь 60 фт')], ['', '⛔', tr('No light', 'Без света')]];
+      return '<div class="tc-row tc-light"><small>🔦 ' + tr('Light:', 'Свет:') + '</small>' + L.map(([k, i, n]) => '<button data-light="' + (k || 'none') + '" data-cid="' + esc(cid) + '" class="' + ((c.light || '') === k ? 'on' : '') + '">' + i + ' ' + n + '</button>').join('') + '</div>';
+    }
+    function setLight(cid, k) {
+      const chars = get(gk('chars'), []); const c = chars.find(x => x.id === cid); if (!c) return;
+      if (k === 'none') delete c.light; else c.light = k;
+      c.upd = Date.now(); // newest copy wins between the DM and the player
+      set(gk('chars'), chars);
+      note = k === 'none' ? '⛔ ' + tr('Light out.', 'Свет погашен.') : '🔦 ' + tr('Light on — the fog opens around you.', 'Свет зажжён — туман вокруг тебя откроется.'); render();
+    }
+
     // ---------- the DM's app asks me: roll my save / Shield? / hit the one running away ----------
     const ABN = { STR: ['STR', 'СИЛ'], DEX: ['DEX', 'ЛОВ'], CON: ['CON', 'ТЕЛ'], INT: ['INT', 'ИНТ'], WIS: ['WIS', 'МДР'], CHA: ['CHA', 'ХАР'] };
     const abn = k => (ABN[k] ? tr(ABN[k][0], ABN[k][1]) : k);
@@ -393,6 +409,7 @@ export function startCard(OBR, opts) {
         await OBR.scene.items.updateItems([item.id], items => { items.forEach(it => { it.metadata[LINK] = link; }); });
         await load(); render(); return;
       }
+      if (b.dataset.light && b.dataset.cid) { setLight(b.dataset.cid, b.dataset.light); return; }
       if (b.dataset.mode) { mode = b.dataset.mode; render(); return; }
       if (b.dataset.ans || b.dataset.oa) {
         const m = get('obrAsk', null); if (!m) return;

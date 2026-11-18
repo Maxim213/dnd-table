@@ -26,6 +26,7 @@
     const s = getSize();
     if (ON.owlbear && U.DM) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="hideRolls" title="' + esc(hideRolls() ? T('Your rolls are hidden from the players — click to show them') : T('Players see your rolls — click to hide them')) + '">' + (hideRolls() ? '🙈' : '👁') + '</button>');
     if (ON.owlbear && U.DM) { const st = !U.strict || U.strict(); el.insertAdjacentHTML('beforeend', '<button class="tb' + (st ? '' : ' freerules') + '" data-act="strictRules" title="' + esc(st ? T('Strict rules: the app refuses what breaks the rules (turns, distance, movement, slots). Click for free rules.') : T('Free rules: players may do anything, the log only says what broke the rules. Click for strict rules.')) + '">' + (st ? '⚖️' : '🕊') + '</button>'); }
+    if (ON.owlbear && U.DM) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="visionPop" title="' + esc(T('Vision on this scene')) + '">🔦</button>');
     if (ON.owlbear) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="tableMusic" title="' + esc(T('Table music')) + '">🎼</button>');
     if (ON.owlbear) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="panelSize" title="' + esc(s === 'wide' ? T('Make the panel narrow (see the map)') : T('Make the panel wide')) + '">' + (s === 'wide' ? '⇥' : '⇤') + '</button>');
     const tag = document.getElementById('modeTag');
@@ -37,6 +38,28 @@
     U.renderTop(); if (U.saveCombat) U.saveCombat();
     U.toast(on ? '⚖️ ' + T('Strict rules: the app refuses what breaks the rules (turns, distance, movement, slots). Click for free rules.') : '🕊 ' + T('Free rules: players may do anything, the log only says what broke the rules. Click for strict rules.'));
   };
+  // ---------- 🔦 the DM: how much the players see on the open scene (obr-vision.js draws their fog) ----------
+  const VIS = 'dndtable/vision';
+  const VMODES = [['off', '👁', 'Off — they see the whole map'], ['day', '☀️', 'Day — everything in line of sight'], ['dusk', '🌆', 'Dusk — 60 ft (darkvision / light: more)'], ['dark', '🌑', 'Dark — only light and darkvision']];
+  async function visionPop() {
+    const pop = document.getElementById('pop'); if (!pop || !window.OBR) return;
+    let v = {}; try { v = ((await OBR.scene.getMetadata()) || {})[VIS] || {}; } catch (e) {}
+    const mode = v.mode || 'off'; const prev = (() => { try { return localStorage.getItem('dnd.visionPreview') === '1'; } catch (e) { return false; } })();
+    const heroes = (S.chars || []).filter(c => c.party !== false);
+    pop.innerHTML = '<div class="popcard settings" role="dialog"><div class="ph"><h2>🔦 ' + T('Vision on this scene') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
+      '<p class="hint">' + T('The players see only what their heroes see: walls block the view, the dark needs a light or darkvision. Seen places stay dim. You always see everything.') + '</p>' +
+      '<div class="btnrow">' + VMODES.map(m => '<button class="' + (mode === m[0] ? 'primary' : '') + '" data-act="visMode" data-v="' + m[0] + '">' + m[1] + ' ' + T(m[2]) + '</button>').join('') + '</div>' +
+      '<h3>🔥 ' + T('Light of the heroes') + '</h3><p>' + heroes.map(c => { let dv = 0; try { dv = E.compute(c).darkvision || 0; } catch (e) {} return '<span class="chip small">' + esc(c.name) + ': ' + (c.light === 'lantern' ? '🏮' : c.light ? '🔥' : '—') + (dv ? ' · 👁 ' + dv + ' ' + T('ft') : '') + '</span>'; }).join(' ') + '</p>' +
+      '<div class="btnrow"><button data-act="visTorch" data-v="torch">🔥 ' + T('Torches for everyone') + '</button><button data-act="visTorch" data-v="">⛔ ' + T('Put out all lights') + '</button><button data-act="visReset">🧹 ' + T('Forget what they explored') + '</button></div>' +
+      '<p><label class="inl"><input type="checkbox" data-on="visPreview"' + (prev ? ' checked' : '') + '> ' + T('Show me the players\' fog (see-through)') + '</label></p>' +
+      '<p class="hint">' + T('Walls: our generated maps have them. On your own map pictures the fog uses only the distance (or walls drawn with Owlbear\'s Dynamic Fog).') + '</p></div>';
+    pop.classList.add('show');
+  }
+  U.ACT.visionPop = () => visionPop();
+  U.ACT.visMode = async ds => { try { const md = (await OBR.scene.getMetadata()) || {}; const v = Object.assign({ epoch: 0 }, md[VIS] || {}, { mode: ds.v }); await OBR.scene.setMetadata({ [VIS]: v }); visionPop(); } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); } };
+  U.ACT.visReset = async () => { try { const md = (await OBR.scene.getMetadata()) || {}; const v = Object.assign({ mode: 'off' }, md[VIS] || {}); v.epoch = (v.epoch || 0) + 1; await OBR.scene.setMetadata({ [VIS]: v }); U.toast('🧹 ' + T('The players forgot the map: only what they see now is open.')); } catch (e) {} };
+  U.ACT.visTorch = ds => { (S.chars || []).filter(c => c.party !== false).forEach(c => { if (ds.v) c.light = ds.v; else delete c.light; }); U.saveChars(); visionPop(); };
+  U.ON.visPreview = el => { try { localStorage.setItem('dnd.visionPreview', el.checked ? '1' : '0'); } catch (e) {} if (window.__vision) window.__vision.soon(); };
   U.ACT.hideRolls = () => { try { localStorage.setItem('dnd.hideRolls', hideRolls() ? '0' : '1'); } catch (e) {} U.renderTop(); U.toast(hideRolls() ? '🙈 ' + T('Your rolls are hidden from the players.') : '👁 ' + T('Players see your rolls.')); };
 
   if (!ON.owlbear) {
@@ -104,7 +127,7 @@
     });
     const party = (S.chars || []).filter(c => c.party).slice(0, 8).map(c => {
       let d = null; try { d = E.compute(c); } catch (e) {}
-      return { id: c.id, n: c.name || T('Unnamed'), cls: c.classKey || '', lvl: c.level, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, cond: (c.conditions || []).slice(0, 6) };
+      return { id: c.id, n: c.name || T('Unnamed'), cls: c.classKey || '', lvl: c.level, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, cond: (c.conditions || []).slice(0, 6), dv: d ? d.darkvision || 0 : 0, lt: ({ torch: 40, lantern: 60, light: 40, daylight: 60 })[c.light] || 0 }; // dv / lt: darkvision and the light he carries (vision fog)
     });
     // the DM's token window: what the one who acts now can do (attacks of a monster, or of the DM's own hero)
     let acts;

@@ -203,11 +203,14 @@
     const b = B(); if (!b || !b.buildSceneUpload || !OBR || !OBR.assets) throw new Error(T('Owlbear does not allow uploads here.'));
     const base = b.buildImageUpload(o.mapBlob).dpi(o.cellPx).name(o.name).locked(true).build();
     const items = o.tokens.map(t => tokenItem(t.name, t.key, t.x, t.y, t.hidden));
-    const walls = (o.walls || []).map(([x1, y1, x2, y2]) => b.buildWall().points([{ x: x1 * GD, y: y1 * GD }, { x: x2 * GD, y: y2 * GD }]).doubleSided(true).blocking(true).locked(true).build());
-    // a 40 ft light on each hero who needs it: with Owlbear's dynamic fog the players see what it lights up
-    const lights = b.buildLight ? o.tokens.map((t, i) => t.light ? b.buildLight().attenuationRadius(GD * 8).sourceRadius(GD * 0.3).falloff(1).lightType('PRIMARY').position(items[i].position).attachedTo(items[i].id).disableHit(true).locked(true).build() : null).filter(Boolean) : [];
-    const extra = walls.concat(lights);
-    const mk = full => b.buildSceneUpload().name(o.name).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(!!o.fog).items(items.concat(full ? extra : [])).build();
+    // Owlbear's own WALL items (its Dynamic Fog extension can use them) — optional extras, dropped if Owlbear refuses them
+    const extra = (o.walls || []).map(([x1, y1, x2, y2]) => b.buildWall().points([{ x: x1 * GD, y: y1 * GD }, { x: x2 * GD, y: y2 * GD }]).doubleSided(true).blocking(true).locked(true).build());
+    // our own vision fog (obr-vision.js) reads the walls from this invisible carrier, and the scene's starting light (mode)
+    const flat = []; (o.walls || []).forEach(w => flat.push(w[0], w[1], w[2], w[3]));
+    if (flat.length || o.vision) items.push(b.buildCurve().points([{ x: 0, y: 0 }, { x: 1, y: 0 }]).position({ x: 0, y: 0 }).strokeOpacity(0).fillOpacity(0).strokeWidth(0).tension(0).closed(false)
+      .layer('DRAWING').locked(true).disableHit(true).name('D&D Table: walls').metadata({ 'dndtable/walls': { s: flat, cell: GD, mode: o.vision || '' } }).build());
+    // no Owlbear fog fill: the fog comes from our vision (the DM picks the light with 🔦)
+    const mk = full => b.buildSceneUpload().name(o.name).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(false).items(items.concat(full ? extra : [])).build();
     try { await OBR.assets.uploadScenes([mk(true)]); return extra.length ? 'full' : 'ok'; }
     catch (e) { if (!extra.length) throw e; console.warn('scene with walls / lights', e); await OBR.assets.uploadScenes([mk(false)]); return 'plain'; }
   }
@@ -344,7 +347,7 @@
     { id: 'f4', type: 'forest', seed: 6100, en: 'Wolf Thicket', ru: 'Волчья чаща', opts: { dense: true, noPath: true } }
   ];
   const mapName = m => (U.LANG === 'ru' ? m.ru : m.en);
-  const ST = { map: 'd1', heroes: true, hide: true, dark: false };
+  const ST = { map: 'd1', heroes: true, hide: true, dark: true };
   const made = {};
   const mapOf = m => made[m.id] || (made[m.id] = U.makeMap(m.type, 'l', m.seed, 80, m.opts));
   function preview() {
@@ -363,8 +366,8 @@
       '<p><b>🌲 ' + T('Forests') + ':</b> ' + MAPS.filter(m => m.type === 'forest').map(btn).join(' ') + '</p>' +
       '<canvas id="scPrev" width="520" height="360" style="width:100%;border-radius:8px;border:1px solid #5a4630;background:#111"></canvas>' +
       '<p><label class="inl"><input type="checkbox" data-on="scHeroes"' + (ST.heroes ? ' checked' : '') + '> 🧙 ' + T('the party\'s heroes at the entrance') + ' 🔵</label> ' +
-      '<label class="inl"><input type="checkbox" data-on="scDark"' + (ST.dark ? ' checked' : '') + '> 🌑 ' + T('dark dungeons (fog: the players see only the light of their heroes — ONLY with the Dynamic Fog extension in the room)') + '</label></p>' +
-      '<p class="hint">' + T('Dark dungeon: the players see only what their heroes light up — that needs Owlbear\'s Dynamic Fog extension (add it to the room). For you the dark looks grey: that is normal.') + '</p>' +
+      '<label class="inl"><input type="checkbox" data-on="scDark"' + (ST.dark ? ' checked' : '') + '> 🌑 ' + T('dungeons start dark (else dusk)') + '</label></p>' +
+      '<p class="hint">' + T('Dungeons come with walls and vision: the players see only what their heroes see (walls block it; in the dark — a torch or darkvision). You see everything. Change the light any time with 🔦 in the top bar.') + '</p>' +
       '<p class="btnrow"><button class="primary" data-act="scUpload">📦 ' + T('Upload «{0}»', esc(mapName(cur))) + '</button> <button data-act="scAllMaps">📦📦 ' + T('Import all maps') + '</button> <button data-act="scFolder">📁 ' + T('Scenario from a folder…') + '</button></p>' +
       '<p class="hint" id="scMsg"></p>' + tokenList() + '</div>';
     pop.classList.add('show'); setTimeout(preview, 30);
@@ -404,7 +407,7 @@
     const tokens = [];
     if (ST.heroes) { const hs = map.heroSpots(party().length); party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false, light: dun }); }); }
     const blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9));
-    return upload({ name: mapName(m), mapBlob: blob, cellPx: map.P, tokens, walls: dun ? map.walls : [], fog: dark });
+    return upload({ name: mapName(m), mapBlob: blob, cellPx: map.P, tokens, walls: dun ? map.walls : [], vision: dun ? (ST.dark ? 'dark' : 'dusk') : '' });
   }
   U.ACT.scUpload = async () => {
     const m = MAPS.find(x => x.id === ST.map) || MAPS[0];
@@ -472,7 +475,7 @@
         const hs = map ? map.heroSpots(n) : st ? [[0, 0], [0, 1], [1, 0], [1, 1], [0, -1], [1, -1], [2, 0], [2, 1]].map(([dx, dy]) => [st[0] + dx, st[1] + dy]) : [];
         party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false }); });
       }
-      const r = await upload({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: map && s.walls !== false ? map.walls : [], fog: s.fog !== false });
+      const r = await upload({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: map && s.walls !== false ? map.walls : [], vision: s.vision || (s.fog ? 'dusk' : '') });
       log.push('🗺 ' + esc(s.name || '') + (r === 'plain' ? ' ' + T('(no walls)') : ''));
     }
     try { const n = await toLibrary(party(), allMonsters(), false); if (n) log.push('📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); } catch (e) { console.warn(e); }
