@@ -7,10 +7,11 @@
 <script type="module">
   const q = new URLSearchParams(location.search);
   const SDK = 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
+  const imp = async u => { for (let i = 0; i < 4; i++) { try { return await Promise.race([import(i ? u + (u.indexOf('?') < 0 ? '?' : '&') + 'r=' + Date.now() : u), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]); } catch (e) { if (i === 3) throw e; await new Promise(r => setTimeout(r, 1500)); } } }; // retry a slow / failed load
   (async () => {
     try {
-      const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr')) : await import(SDK).then(m => { window.OBR_SDK = m; return m.default; });
-      const { startBackground } = await import('./_engine/app/obr-bg.js');
+      const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr')) : await imp(SDK).then(m => { window.OBR_SDK = m; return m.default; });
+      const { startBackground } = await imp('./_engine/app/obr-bg.js');
       startBackground(OBR);
     } catch (e) { console.error('D&D Table background:', e); }
   })();

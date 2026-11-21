@@ -49,11 +49,12 @@
     const c = document.getElementById('card'); if (!c || c.textContent.trim() !== '⏳') return;
     c.innerHTML = '<p class="tc-msg">⚠️ Окно не загрузилось (этап: ' + window.__stage + '). Ходи через панель D&amp;D Table — вкладка «Бой».</p><p><button onclick="location.reload()">🔄 Ещё раз</button></p>';
   }, 6000);
+  const imp = async u => { for (let i = 0; i < 4; i++) { try { return await Promise.race([import(i ? u + (u.indexOf('?') < 0 ? '?' : '&') + 'r=' + Date.now() : u), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]); } catch (e) { if (i === 3) throw e; await new Promise(r => setTimeout(r, 1500)); } } }; // retry a slow / failed load
   (async () => {
     try {
-      const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr'), q.get('sel')) : await import(SDK).then(m => { window.OBR_SDK = m; return m.default; });
+      const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr'), q.get('sel')) : await imp(SDK).then(m => { window.OBR_SDK = m; return m.default; });
       window.__stage = 'code';
-      const { startCard } = await import('./_engine/app/obr-card.js');
+      const { startCard } = await imp('./_engine/app/obr-card.js');
       window.__stage = 'obr';
       startCard(OBR, { pop: !!q.get('pop') });
     } catch (e) { document.getElementById('card').innerHTML = '<p class="tc-msg">⚠️ ' + String(e.message || e).replace(/</g, '&lt;') + '</p>'; }
