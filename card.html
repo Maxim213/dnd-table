@@ -43,10 +43,18 @@
 <script type="module">
   const q = new URLSearchParams(location.search);
   const SDK = 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
+  // watchdog: if the window is still empty after 6 s, say so (with the stage it stopped at) and offer a retry
+  window.__stage = 'sdk';
+  setTimeout(() => {
+    const c = document.getElementById('card'); if (!c || c.textContent.trim() !== '⏳') return;
+    c.innerHTML = '<p class="tc-msg">⚠️ Окно не загрузилось (этап: ' + window.__stage + '). Ходи через панель D&amp;D Table — вкладка «Бой».</p><p><button onclick="location.reload()">🔄 Ещё раз</button></p>';
+  }, 6000);
   (async () => {
     try {
       const OBR = q.get('fakeobr') ? (await import('./_dev/fakeobr.js')).default(q.get('fakeobr'), q.get('name') || q.get('fakeobr'), q.get('sel')) : await import(SDK).then(m => { window.OBR_SDK = m; return m.default; });
+      window.__stage = 'code';
       const { startCard } = await import('./_engine/app/obr-card.js');
+      window.__stage = 'obr';
       startCard(OBR, { pop: !!q.get('pop') });
     } catch (e) { document.getElementById('card').innerHTML = '<p class="tc-msg">⚠️ ' + String(e.message || e).replace(/</g, '&lt;') + '</p>'; }
   })();

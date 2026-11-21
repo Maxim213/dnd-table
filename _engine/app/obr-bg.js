@@ -264,6 +264,14 @@ export function startBackground(OBR, by) {
       try { await OBR.popover.close(POP_ID); } catch (e) {}
       try { await OBR.popover.open({ id: POP_ID, url: new URL('card.html?pop=1', location.href).href, width: 370, height: 560, anchorReference: 'POSITION', anchorPosition: pos, anchorOrigin: { horizontal: 'LEFT', vertical: 'CENTER' }, transformOrigin: { horizontal: 'LEFT', vertical: 'CENTER' }, disableClickAway: true }); }
       catch (e) { console.warn('popover', e); }
+      // the window never drew (it stays ⏳ and has no ✕): close it after 15 s and point to the panel
+      const t0 = Date.now();
+      setTimeout(async () => {
+        let ok = 0; try { ok = Number(localStorage.getItem('dnd.popOk') || 0); } catch (e) {}
+        if (ok >= t0 || Date.now() - ((get('obrPop', null) || {}).t || 0) < 14000) return; // it drew, or a newer click reopened it
+        try { await OBR.popover.close(POP_ID); } catch (e) {}
+        say(DM ? 'The token window did not load — use the D&D Table panel.' : 'Окно токена не загрузилось — ходи через панель D&D Table (вкладка «Бой»).', 'WARNING');
+      }, 15000);
     }
     async function toolClick(ctx, ev) {
       const aim = get('obrAim', null);

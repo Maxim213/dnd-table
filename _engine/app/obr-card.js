@@ -20,7 +20,7 @@ export function startCard(OBR, opts) {
   const ST = { ok: ['Unhurt', 'Цел', '🟢'], hurt: ['Hurt', 'Ранен', '🟡'], bloodied: ['Badly hurt', 'Сильно ранен', '🟠'], dying: ['Barely alive', 'Еле жив', '🔴'], down: ['Down', 'Повержен', '💀'] };
   const COST = { a: ['🗡', 'Action', 'Действие'], b: ['⚡', 'Bonus', 'Бонусное'], r: ['🛡', 'Reaction', 'Реакция'], '-': ['', 'free', 'бесплатно'] };
   const el = document.getElementById('card');
-  OBR.onReady(async () => {
+  OBR.onReady(async () => { window.__stage = 'role';
     const role = await OBR.player.getRole(); const DM = role === 'GM';
     const P = DM ? 'dndt.' : 'dndp.';
     const get = (k, d) => { try { const v = localStorage.getItem(P + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
@@ -120,8 +120,8 @@ export function startCard(OBR, opts) {
     // ---------- render ----------
     async function render() {
       if (busy) return; busy = true;
-      try { let h = await build() + (note ? '<p class="tc-msg">' + note + '</p>' : ''); if (POP && h.indexOf('data-do="close"') < 0) h = '<div class="tc-topx"><button data-do="close" title="' + tr('Close', 'Закрыть') + '">✕</button></div>' + h; el.innerHTML = h; }
-      catch (e) { el.innerHTML = '<p class="tc-msg">⚠️ ' + esc(e.message || e) + '</p>'; console.warn(e); }
+      try { window.__stage = 'build'; const built = await Promise.race([build(), new Promise((_, no) => setTimeout(() => no(new Error(tr('The map did not answer — try again or use the panel.', 'Карта не ответила — попробуй ещё раз или ходи через панель.'))), 5000))]); let h = built + (note ? '<p class="tc-msg">' + note + '</p>' : ''); if (POP && h.indexOf('data-do="close"') < 0) h = '<div class="tc-topx"><button data-do="close" title="' + tr('Close', 'Закрыть') + '">✕</button></div>' + h; el.innerHTML = h; window.__stage = 'ok'; try { localStorage.setItem('dnd.popOk', String(Date.now())); } catch (e) {} }
+      catch (e) { el.innerHTML = (POP ? '<div class="tc-topx"><button data-do="close">✕</button></div>' : '') + '<p class="tc-msg">⚠️ ' + esc(e.message || e) + '</p>' + (POP ? '<p><button onclick="location.reload()">🔄 ' + tr('Try again', 'Ещё раз') + '</button></p>' : ''); console.warn(e); }
       finally { busy = false; }
     }
     async function build() {
