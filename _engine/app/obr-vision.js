@@ -55,7 +55,7 @@ export function startVision(OBR, o) {
       const addW = (a, b, c, d) => walls.push([a, b, c, d, Math.min(a, c), Math.max(a, c), Math.min(b, d), Math.max(b, d)]);
       all.forEach(it => {
         const w = it.metadata && it.metadata[WALLS];
-        if (w && Array.isArray(w.s)) { const g = w.cell || dpi; for (let i = 0; i + 3 < w.s.length; i += 4) addW(w.s[i] * g, w.s[i + 1] * g, w.s[i + 2] * g, w.s[i + 3] * g); }
+        if (w && Array.isArray(w.s)) { const g = w.cell || dpi; const f = w.f || []; for (let i = 0; i + 3 < w.s.length; i += 4) { if (f[i / 4] === 2) continue; /* an open door */ addW(w.s[i] * g, w.s[i + 1] * g, w.s[i + 2] * g, w.s[i + 3] * g); } }
         if (it.type === 'WALL' && Array.isArray(it.points)) { const p = it.position || { x: 0, y: 0 }; for (let i = 0; i + 1 < it.points.length; i++) addW(p.x + it.points[i].x, p.y + it.points[i].y, p.x + it.points[i + 1].x, p.y + it.points[i + 1].y); }
       });
       // the party's eyes: every hero token on the map

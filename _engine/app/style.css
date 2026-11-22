@@ -555,3 +555,5 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 @media print { .sheettabs { display: none; } }
 @media (max-width: 1000px) { body.on-sheet #side { display: none; } } /* narrow panel: dice and log are tabs of the sheet */
 #sheetDice .panel, #sheetLog .panel { margin-bottom: 12px; }
+.fxrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.fxrow .fxn { flex: 1; }

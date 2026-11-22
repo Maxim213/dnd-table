@@ -562,6 +562,8 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 @media print { .sheettabs { display: none; } }
 @media (max-width: 1000px) { body.on-sheet #side { display: none; } } /* narrow panel: dice and log are tabs of the sheet */
 #sheetDice .panel, #sheetLog .panel { margin-bottom: 12px; }
+.fxrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.fxrow .fxn { flex: 1; }
 
 </style>
 </head>
@@ -6272,6 +6274,26 @@ window.DND_RU.UI = {
   'Bag': 'Инвентарь',
   'Card': 'Карточка',
   'Rolls': 'Броски',
+  'Atmosphere effects': 'Эффекты атмосферы',
+  'Moving effects over the map, for everybody. Darkness of the vision fog still hides them.': 'Живые эффекты поверх карты — видят все. Темнота тумана видимости их всё равно прячет.',
+  'Ready moods': 'Готовые настроения',
+  'One by one': 'По одному',
+  'Light': 'Слабо',
+  'Medium': 'Средне',
+  'Strong': 'Сильно',
+  'Fog': 'Туман',
+  'Falling ash': 'Пепел',
+  'Dripping water': 'Капель',
+  'Sparks and embers': 'Искры',
+  'Gloom at the edges': 'Мрак по краям',
+  'Rain (outdoors)': 'Дождь (снаружи)',
+  'Snow (outdoors)': 'Снег (снаружи)',
+  'Sewer': 'Водосток',
+  'Square': 'Площадь',
+  'Crypt': 'Склеп',
+  'Forge': 'Кузня',
+  'Storm': 'Буря',
+  'Effects sit on the map picture of the open scene. Each scene keeps its own.': 'Эффекты лежат на карте открытой сцены. У каждой сцены свои.',
   'Token': 'Токен',
   'Token picture for {0} — paste an image link (png / jpg / webp). Empty = automatic.': 'Картинка токена для «{0}» — вставь ссылку на картинку (png / jpg / webp). Пусто = автоматически.',
   '⚠️ That is not a link (it must start with https://).': '⚠️ Это не ссылка (она должна начинаться с https://).',

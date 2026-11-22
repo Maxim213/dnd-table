@@ -303,6 +303,8 @@ export function startBackground(OBR, by) {
     // ---------- 👁 vision fog (obr-vision.js): what the party can see on the open scene ----------
     var visionApi = null;
     import('./obr-vision.js').then(m => { visionApi = m.startVision(OBR, { DM, get }); }).catch(e => console.warn('vision', e));
+    if (DM) import('./obr-walls.js').then(m => { m.startWalls(OBR, { tr }); }).catch(e => console.warn('walls', e)); // 🧱 / 🚪 modes of the D&D tool
+    import('./obr-fx.js').then(m => { m.startFx(OBR); }).catch(e => console.warn('fx', e)); // ✨ fog, ash, rain… over the map (scene metadata dndtable/fx)
 
     // ---------- ⚔️ the D&D tool (Owlbear toolbar): click a token / the map → the token window; drag your token → a ruler with your movement ----------
     const TOOL = 'dndtable/tool', MODE = 'dndtable/mode', POP_ID = 'dndtable/pop', RULER = 'dndtable/ruler';

@@ -222,11 +222,11 @@
     await sized(o.tokens.map(t => t.key));
     const items = o.tokens.map(t => tokenItem(t.name, t.key, t.x, t.y, t.hidden));
     // Owlbear's own WALL items (its Dynamic Fog extension can use them) — optional extras, dropped if Owlbear refuses them
-    const extra = (o.walls || []).map(([x1, y1, x2, y2]) => b.buildWall().points([{ x: x1 * GD, y: y1 * GD }, { x: x2 * GD, y: y2 * GD }]).doubleSided(true).blocking(true).locked(true).build());
+    const extra = (o.walls || []).filter(w => !w[4]).map(([x1, y1, x2, y2]) => b.buildWall().points([{ x: x1 * GD, y: y1 * GD }, { x: x2 * GD, y: y2 * GD }]).doubleSided(true).blocking(true).locked(true).build());
     // our own vision fog (obr-vision.js) reads the walls from this invisible carrier, and the scene's starting light (mode)
-    const flat = []; (o.walls || []).forEach(w => flat.push(w[0], w[1], w[2], w[3]));
+    const flat = [], fl = []; (o.walls || []).forEach(w => { flat.push(w[0], w[1], w[2], w[3]); fl.push(Number(w[4]) || 0); }); // [x1, y1, x2, y2, 0 wall | 1 door | 2 open door]
     if (flat.length || o.vision) items.push(b.buildCurve().points([{ x: 0, y: 0 }, { x: 1, y: 0 }]).position({ x: 0, y: 0 }).strokeOpacity(0).fillOpacity(0).strokeWidth(0).tension(0).closed(false)
-      .layer('DRAWING').locked(true).disableHit(true).name('D&D Table: walls').metadata({ 'dndtable/walls': { s: flat, cell: GD, mode: o.vision || '' } }).build());
+      .layer('DRAWING').locked(true).disableHit(true).name('D&D Table: walls').metadata({ 'dndtable/walls': { s: flat, f: fl, cell: GD, mode: o.vision || '' } }).build());
     // no Owlbear fog fill: the fog comes from our vision (the DM picks the light with 🔦)
     const mk = full => b.buildSceneUpload().name(o.name).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(false).items(items.concat(full ? extra : [])).build();
     try { await OBR.assets.uploadScenes([mk(true)]); return extra.length ? 'full' : 'ok'; }
@@ -497,7 +497,7 @@
         const hs = map ? map.heroSpots(n) : st ? [[0, 0], [0, 1], [1, 0], [1, 1], [0, -1], [1, -1], [2, 0], [2, 1]].map(([dx, dy]) => [st[0] + dx, st[1] + dy]) : [];
         party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false }); });
       }
-      const r = await upload({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: map && s.walls !== false ? map.walls : [], vision: s.vision || (s.fog ? 'dusk' : '') });
+      const r = await upload({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: Array.isArray(s.walls) ? s.walls : (map && s.walls !== false ? map.walls : []), vision: s.vision || (s.fog ? 'dusk' : '') });
       log.push('🗺 ' + esc(s.name || '') + (r === 'plain' ? ' ' + T('(no walls)') : ''));
     }
     try { const n = await toLibrary(party(), allMonsters(), false); if (n) log.push('📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); } catch (e) { console.warn(e); }
