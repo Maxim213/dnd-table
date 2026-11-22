@@ -15,7 +15,7 @@
     return '<div class="xpbox' + (ready ? ' ready' : '') + '"><div class="xpl">⭐ <b>' + T('Experience') + '</b> ' + ib('xp') + ' <span class="xpn">' + xp.toLocaleString() + (max ? '' : ' / ' + to.toLocaleString()) + ' XP</span>' +
       (max ? ' <small>' + T('max level') + '</small>' : ' <small>' + T('to level {0}', lvl + 1) + '</small>') + '</div>' +
       '<div class="xpbar"><span style="width:' + pct + '%"></span></div>' +
-      '<div class="xpctl"><input type="number" id="xpAmt" min="0" placeholder="' + esc(T('XP')) + '"><button class="mini" data-act="addXp">＋ ' + T('Add XP') + '</button>' +
+      '<div class="xpctl">' + (U.PLAYER ? (ready ? '' : '<small class="dim">' + T('The DM gives XP.') + '</small>') : '<input type="number" id="xpAmt" min="0" placeholder="' + esc(T('XP')) + '"><button class="mini" data-act="addXp">＋ ' + T('Add XP') + '</button>') +
       (ready ? '<button class="primary lvlbtn" data-act="levelUp">⬆ ' + T('Level up to {0}!', lvl + 1) + '</button>' : '') +
       (U.DM && !max && !ready ? '<button class="mini" data-act="levelUp" data-force="1" title="' + esc(T('Level up without XP (the DM decides)')) + '">⬆ ' + T('Level {0}', lvl + 1) + '</button>' : '') + '</div></div>';
   };
@@ -87,6 +87,7 @@
 
   Object.assign(U.ACT, {
     addXp: () => {
+      if (U.PLAYER) return; // only the DM gives XP
       const c = U.cur(); const el = document.getElementById('xpAmt'); const n = Math.round(Number(el && el.value) || 0); if (!n) return;
       const before = D.levelForXp(Number(c.xp) || 0);
       c.xp = Math.max(0, (Number(c.xp) || 0) + n); U.saveChars();

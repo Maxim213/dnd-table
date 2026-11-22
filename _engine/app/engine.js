@@ -281,7 +281,7 @@
     E.asiList(c).forEach(s => { if (s.k === 'feat' && s.a && D.GENERAL_FEATS && D.GENERAL_FEATS[s.f] && D.GENERAL_FEATS[s.f].saveProf) extraSaves.add(s.a); });
     if (c.classKey === 'rogue' && lvl >= 15) { extraSaves.add('WIS'); extraSaves.add('CHA'); }
     if (c.classKey === 'monk' && lvl >= 14) D.ABIL.forEach(a => extraSaves.add(a));
-    E.subFeats(c, 'saveProf').forEach(f => { const a = f.saveProf.find(s => !(C && C.saves.includes(s))); if (a) extraSaves.add(a); });
+    E.subFeats(c, 'saveProf').filter(f => Array.isArray(f.saveProf)).forEach(f => { const a = f.saveProf.find(s => !(C && C.saves.includes(s))); if (a) extraSaves.add(a); });
     const aura = c.classKey === 'paladin' && lvl >= 6 ? Math.max(1, mod.CHA) : 0;
     D.ABIL.forEach(a => { const p = !!(C && C.saves.includes(a)) || extraSaves.has(a); saves[a] = { prof: p, val: mod[a] + (p ? pb : 0) + aura + E.effSum(L, 'save') }; });
 

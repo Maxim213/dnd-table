@@ -75,7 +75,7 @@
   const baseSaveLog = U.saveLog;
   U.saveLog = function () { (S.log || []).forEach(e => { if (e && !e.id) { e.id = E.uid(); if (!e.remote) e.mine = 1; } }); const r = baseSaveLog(); local('log'); return r; };
   // when the panel itself runs the sync (no background page), tell it about our own saves (no "storage" event for them)
-  const local = k => { const s = window.__obrSync; if (s && s.by === 'panel') setTimeout(() => s.key(P + (k === 'obrstate' || k === 'obrmusic' ? k : gk(k))), 0); };
+  const local = k => { const s = window.__obrSync; if (s && s.by === 'panel') setTimeout(() => s.key(P + (k === 'obrstate' || k === 'obrmusic' || k === 'obrshops' ? k : gk(k))), 0); };
 
   // ---------- 2. heroes get "upd" when they change (newest copy wins between DM and player) ----------
   const sig = c => { const x = Object.assign({}, c); delete x.upd; delete x.portrait; delete x.obr; return JSON.stringify(x); };
@@ -84,7 +84,7 @@
   const baseSaveChars = U.saveChars;
   U.saveChars = function () {
     const now = Date.now();
-    (S.chars || []).forEach(c => { const s = sig(c); if (sigs[c.id] !== s) { c.upd = now; sigs[c.id] = s; } });
+    (S.chars || []).forEach(c => { const s = sig(c); if (sigs[c.id] !== s) { c.upd = Math.max(now, (Number(c.upd) || 0) + 1); sigs[c.id] = s; } }); // always newer than the copy we got — even if this computer's clock is behind
     const r = baseSaveChars(); local('chars'); queueState(); thumbs(); saveMenu(); return r;
   };
   // portraits are too big for Owlbear (16 KB per message): my heroes carry a small 96×96 copy (portraitThumb, ~4 KB)
@@ -799,6 +799,45 @@
   U.IN.tvol = el => { try { localStorage.setItem('dnd.tableVol', String(Number(el.value) / 100)); } catch (e) {} const b = el.parentNode.querySelector('.setv'); if (b) b.textContent = el.value + '%'; if (window.TableMusic) window.TableMusic.setVolume(); };
   U.ON.tmute = el => { try { localStorage.setItem('dnd.tableMute', el.checked ? '1' : '0'); } catch (e) {} if (window.TableMusic) window.TableMusic.setVolume(); };
 
+  // ---------- 5b. shops: the DM's shops reach every player; a purchase lowers the DM's stock ----------
+  // DM → obrshops (compact: catalog items go as id + bonus + price + stock) → the background page broadcasts → the player's obrshops → his 🛒 Shops
+  const catalogItem = id => /^(w|a|g|m|h):/.test(String(id || '')) && D.catalogById && D.catalogById(id);
+  const shopPack = () => (U.allShops ? U.allShops() : S.shops || []).map(s => ({ id: s.id, name: s.name, desc: s.desc || '', items: (s.items || []).map(x => catalogItem(x.id) ? { i: x.id, m: x.magicBonus || 0, p: x.price, q: x.qty } : Object.assign({}, x)) }));
+  let lastShops = '';
+  function publishShops() {
+    if (!U.DM) return;
+    const pack = shopPack(); const s = JSON.stringify(pack); if (s === lastShops) return; lastShops = s;
+    U.raw.set('obrshops', { t: Date.now(), list: pack }); local('obrshops');
+  }
+  function takeShops() { // player: rebuild the DM's shops from the compact copy; my own shops (loaded from files) stay
+    if (!U.PLAYER) return;
+    const pk = U.raw.get('obrshops', null); if (!pk || !Array.isArray(pk.list)) return;
+    const dm = pk.list.map(s => ({ id: s.id, name: s.name, desc: s.desc || '', obr: 1, items: (s.items || []).map(x => {
+      if (!x.i) return x; const e = D.catalogById && D.catalogById(x.i);
+      return e ? Object.assign(U.entrySnap(e, { magicBonus: x.m || 0 }), { price: x.p, qty: x.q }) : null;
+    }).filter(Boolean) }));
+    S.shops = (S.shops || []).filter(s => !s.obr && !dm.some(d => d.id === s.id)).concat(dm);
+    U.store.set('shops', S.shops);
+    if (S.view === 'items') redraw();
+  }
+  U.shopBought = (sh, i) => { // player bought in a DM shop → the DM's app lowers the stock
+    if (!U.PLAYER || !sh || !sh.obr) return;
+    try { OBR.broadcast.sendMessage('dndtable/v1', { type: 'shopBuy', sid: sh.id, i, id: (sh.items[i] || {}).id, by: (U.cur() || {}).name || '' }); } catch (e) {}
+  };
+  function takeBuys() { // DM: purchases from the players
+    if (!U.DM) return;
+    const Q = U.raw.get('obrShopBuy', []); if (!Q.length) return; U.raw.set('obrShopBuy', []);
+    let changed = false;
+    Q.forEach(q => { const sh = (S.shops || []).find(s => s.id === q.sid); const x = sh && sh.items[q.i]; if (x && x.id === q.id && x.qty > 0) { x.qty--; changed = true; } });
+    if (changed) { U.store.set('shops', S.shops); if (S.view === 'items') redraw(); }
+    publishShops();
+  }
+  window.addEventListener('storage', e => {
+    const k = e.key || ''; if (!k.startsWith(P)) return; const rest = k.slice(P.length);
+    if (U.PLAYER && rest === 'obrshops') takeShops();
+    if (U.DM && rest === 'obrShopBuy') takeBuys();
+  });
+
   // ---------- 6. is the background page alive? If not, the panel syncs itself (while it is open) ----------
   let syncMode = 'wait'; // 'bg' 🟢 | 'panel' 🟡 | 'wait' ⏳ | 'off' 🔴
   const bgAlive = () => { const a = U.raw.get('syncAlive', null); return !!(a && a.by === 'bg' && Date.now() - a.t < 12000); };
@@ -810,6 +849,12 @@
     catch (e) { console.warn('sync', e); syncMode = 'off'; }
     U.renderTop();
   }
+  // watchdog: the background page went silent (crashed / lost the connection) → this panel takes over; 🔴 → try again
+  let silent = 0;
+  setInterval(() => {
+    if (syncMode === 'bg') { silent = bgAlive() ? 0 : silent + 1; if (silent >= 2) { silent = 0; syncMode = 'wait'; U.renderTop(); checkSync(); } }
+    else if (syncMode === 'off') { syncMode = 'wait'; U.renderTop(); checkSync(); }
+  }, 10000);
   const SYNC = { bg: ['🟢', 'Sync is on (background page). Click to send everything again.'], panel: ['🟡', 'Sync works only while this panel is open: reinstall the extension (manifest.json?v=…) to get the background page. Click to send everything again.'], wait: ['⏳', 'Connecting…'], off: ['🔴', 'Sync is off. Reload the page.'] };
   const topWithSync = U.renderTop;
   U.renderTop = function () {
@@ -831,6 +876,7 @@
     remember();
     checkSync(); setTimeout(thumbs, 500); // heroes that already have a picture
     saveMenu(); if (U.DM) setTimeout(runActQueue, 1500); // requests that came while the panel was closed
+    if (U.DM) { setTimeout(() => { publishShops(); takeBuys(); }, 1200); setInterval(publishShops, 4000); } else takeShops(); // 🛒 shops for everybody
     if (U.DM) { U.obrWatchMoves(); try { OBR.scene.onReadyChange(r => { if (r) U.obrWatchMoves(); }); } catch (e) {} } // movement rules on the map
     if (U.PLAYER) {
       const nav = document.querySelector('header.top nav');

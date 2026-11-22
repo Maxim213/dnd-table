@@ -546,3 +546,10 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 .obract .move { margin: 2px 0; }
 .obract .basics .mini { margin-right: 4px; }
 #side .dist, .log .dist { display: inline-block; font-size: 11px; color: #9ec7ff; margin-right: 6px; }
+
+/* hero sheet tabs (one topic per screen; 📖 All = the 3-column page) */
+.sheettabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; position: sticky; top: 0; z-index: 5; padding: 6px 0; background: var(--bg, #15110d); }
+.sheettabs button { border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+.sheettabs button.on { background: var(--gold, #d9a441); color: #1c140b; border-color: var(--gold, #d9a441); font-weight: 700; }
+.sheetone > section, .sheetone > .strip, .sheetone > .now, .sheetone > div { margin-bottom: 14px; }
+@media print { .sheettabs { display: none; } }

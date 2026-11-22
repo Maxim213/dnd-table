@@ -76,10 +76,17 @@ export function startBackground(OBR, by) {
       list = list.map(c => Object.assign({}, c, { inventory: (c.inventory || []).map(it => Object.assign({}, it, { desc: '', cdesc: '' })), notes: '' }));
       s = JSON.stringify(list); return s.length < 15500 ? list : list.slice(0, 1);
     };
-    const publishHeroes = async () => { // player → the DM sees them in his game
+    let lastHeroes = '';
+    const publishHeroes = async force => { // player → the DM sees them in his game
       if (DM) return;
-      const list = fit(get('chars', []).map(slim));
-      try { await OBR.player.setMetadata({ [HEROES]: list }); } catch (e) { console.warn('hero metadata', e); }
+      const list = fit(get('chars', []).map(slim)); const s = JSON.stringify(list);
+      if (!force && s === lastHeroes) return;
+      try { await OBR.player.setMetadata({ [HEROES]: list }); lastHeroes = s; } catch (e) { console.warn('hero metadata', e); }
+    };
+    const resent = {}; // DM: hero id → when we last resent it (not more often than every 20 s)
+    const resendHero = (pid, c) => {
+      if (Date.now() - (resent[c.id] || 0) < 20000) return; resent[c.id] = Date.now();
+      try { OBR.broadcast.sendMessage(CH, { type: 'heroSet', to: pid, hero: slim(c) }); } catch (e) {}
     };
     let lastParty = [];
     const mergeHeroes = players => { // DM: put the players' heroes into the open game
@@ -91,7 +98,8 @@ export function startBackground(OBR, by) {
         list.forEach(h => {
           if (!h || !h.id) return;
           const i = chars.findIndex(c => c.id === h.id); const old = i >= 0 ? chars[i] : null;
-          if (old && old.obr && (h.upd || 0) <= (old.upd || 0)) return; // ours is newer or the same
+          if (old && old.obr && (h.upd || 0) < (old.upd || 0)) { resendHero(p.id, old); return; } // ours is newer: the player missed a change (was offline) → send it again
+          if (old && old.obr && (h.upd || 0) === (old.upd || 0)) return; // the same
           const merged = Object.assign({}, h, { obr: { pid: p.id, name: p.name }, party: old ? old.party !== false : true });
           if (h.portraitThumb) merged.portrait = h.portraitThumb; // the player's picture (small copy)
           else if (old && old.portrait) merged.portrait = old.portrait;
@@ -126,12 +134,14 @@ export function startBackground(OBR, by) {
     const publishState = async () => {
       if (!DM) return;
       const st = get('obrstate', null); const s = JSON.stringify(st || null);
-      if (s === lastState) return; lastState = s;
-      try { await OBR.room.setMetadata({ [ROOM]: st || null }); } catch (e) { console.warn('room metadata', e); }
+      if (s === lastState) return;
+      try { await OBR.room.setMetadata({ [ROOM]: st || null }); lastState = s; } catch (e) { console.warn('room metadata', e); } // failed (offline) → the self-check tries again
     };
     let turnKey = get('obrTurnKey', '');
-    const takeState = st => {
+    let lastTaken = '';
+    const takeState = (st, quiet) => {
       if (DM) return;
+      const k = JSON.stringify(st || null); if (quiet && k === lastTaken) return; lastTaken = k; // the self-check found nothing new
       set('obrstate', st || null); drawReachSoon(); if (visionApi) visionApi.soon();
       const mine = new Set(get('chars', []).map(c => c.id));
       const a = st && st.on && st.list && st.list[st.turn];
@@ -175,6 +185,10 @@ export function startBackground(OBR, by) {
       const m = (ev && ev.data) || {};
       if (m.type === 'log') takeLog(m);
       else if (m.type === 'heroSet') takeHero(m);
+      else if (m.type === 'shop' && !DM) takeShopPart(m);
+      else if (m.type === 'shopIds' && !DM) takeShopIds(m);
+      else if (m.type === 'shopReq' && DM) sendShops();
+      else if (m.type === 'shopBuy' && DM) { const Q = get('obrShopBuy', []); Q.push({ sid: m.sid, i: m.i, id: m.id }); set('obrShopBuy', Q.slice(-50)); }
       else if (m.type === 'act' && DM && m.req) takeAct(m.req);
       else if (m.type === 'note' && m.to === OBR.player.id && m.text) { try { OBR.notification.show(String(m.text).slice(0, 160), 'WARNING'); } catch (e) {} }
       // the DM's app waits for a player's answer (a save he rolls himself, Shield yes / no)
@@ -198,6 +212,48 @@ export function startBackground(OBR, by) {
       OBR.room.getMetadata().then(md => { takeState((md || {})[ROOM]); playMusic((md || {})[MUSIC]); }).catch(() => {});
       publishHeroes();
     }
+    // ---------- 🛒 shops: DM (obrshops) → every player; a message is ≤16 KB, so a big shop goes in parts ----------
+    let shopT = 0, shopLater = 0;
+    async function sendShops() {
+      if (!DM) return;
+      if (Date.now() - shopT < 1500) { clearTimeout(shopLater); shopLater = setTimeout(sendShops, 1600); return; } shopT = Date.now();
+      const pk = get('obrshops', null); if (!pk || !Array.isArray(pk.list)) return;
+      const ids = pk.list.map(s => s.id);
+      for (const s of pk.list) {
+        const parts = []; let cur = [], size = 0;
+        (s.items || []).forEach(x => { const xs = JSON.stringify(x).length; if (cur.length && size + xs > 11000) { parts.push(cur); cur = []; size = 0; } cur.push(xs > 11000 ? Object.assign({}, x, { desc: '' }) : x); size += Math.min(xs, 11000); });
+        parts.push(cur);
+        for (let k = 0; k < parts.length; k++) { try { await OBR.broadcast.sendMessage(CH, { type: 'shop', t: pk.t, id: s.id, name: s.name, desc: String(s.desc || '').slice(0, 1500), part: k, parts: parts.length, items: parts[k] }); } catch (e) { console.warn('shop', e); } }
+      }
+      try { await OBR.broadcast.sendMessage(CH, { type: 'shopIds', t: pk.t, ids }); } catch (e) {}
+    }
+    const shopBuf = {}; // player: parts of a shop that came in pieces
+    function takeShopPart(m) {
+      const b = shopBuf[m.id] = (shopBuf[m.id] && shopBuf[m.id].t === m.t) ? shopBuf[m.id] : { t: m.t, got: {} };
+      b.got[m.part] = m.items || [];
+      if (Object.keys(b.got).length < (m.parts || 1)) return;
+      const items = []; for (let k = 0; k < (m.parts || 1); k++) items.push(...(b.got[k] || []));
+      delete shopBuf[m.id];
+      const pk = get('obrshops', null) || { list: [] }; const list = (pk.list || []).filter(s => s.id !== m.id);
+      list.push({ id: m.id, name: m.name, desc: m.desc || '', items });
+      set('obrshops', { t: m.t, list, got: pk.got });
+    }
+    function takeShopIds(m) {
+      const pk = get('obrshops', null) || { list: [] }; const keep = new Set(m.ids || []);
+      const list = (pk.list || []).filter(s => keep.has(s.id)); list.sort((a, b) => m.ids.indexOf(a.id) - m.ids.indexOf(b.id));
+      set('obrshops', { t: m.t, list, got: Date.now() });
+    }
+    const askShops = () => { try { OBR.broadcast.sendMessage(CH, { type: 'shopReq' }); } catch (e) {} };
+    if (!DM) setTimeout(askShops, 1500); // just joined: ask the DM for his shops
+    // self-check every 15 s: a dropped connection loses one-time messages, so compare with the room and fix what was missed
+    let tick = 0;
+    setInterval(async () => {
+      tick++;
+      try {
+        if (DM) { await publishState(); mergeHeroes(await OBR.party.getPlayers()); }
+        else { const md = (await OBR.room.getMetadata()) || {}; takeState(md[ROOM], true); playMusic(md[MUSIC]); await publishHeroes(tick % 4 === 0); const sh = get('obrshops', null); if (!sh || !sh.got || tick % 20 === 0) askShops(); } // no shops yet (or every 5 min): ask again
+      } catch (e) {}
+    }, 15000);
     window.addEventListener('storage', e => { if (e.key === 'dnd.tableVol' || e.key === 'dnd.tableMute') musicLib().then(TM => TM && TM.setVolume()); });
     const onKey = k => {
       k = k || '';
@@ -208,6 +264,7 @@ export function startBackground(OBR, by) {
       if (rest === gk('chars')) { if (DM) sendHeroChanges(); else publishHeroes(); }
       if (DM && rest === 'obrstate') publishState();
       if (DM && rest === 'obrmusic') publishMusic();
+      if (DM && rest === 'obrshops') sendShops(); // the DM changed a shop
       if (rest === 'resyncReq' && by === 'bg') resync(); // the 🟢 button in the panel
     };
     window.addEventListener('storage', e => onKey(e.key));
@@ -217,7 +274,7 @@ export function startBackground(OBR, by) {
     // resend everything (the 🟢 / 🟡 button in the panel)
     const resync = async () => {
       if (DM) { lastState = ''; await publishState(); try { mergeHeroes(await OBR.party.getPlayers()); } catch (e) {} }
-      else { await publishHeroes(); try { takeState(((await OBR.room.getMetadata()) || {})[ROOM]); } catch (e) {} }
+      else { await publishHeroes(true); try { takeState(((await OBR.room.getMetadata()) || {})[ROOM]); } catch (e) {} }
       await sendNewLog();
       return true;
     };

@@ -165,6 +165,7 @@
   }
   const allShops = () => { const sc = scenarioShop(); return (sc ? [sc] : []).concat(S.shops); };
   const shopById = id => allShops().find(s => s.id === id);
+  U.allShops = allShops; // online.js sends them to the players
 
   function shopsTab() {
     const sh = S.shopSel && shopById(S.shopSel);
@@ -292,6 +293,7 @@
       c.gold = Math.round(((Number(c.gold) || 0) - x.price) * 100) / 100;
       const it = U.giveItem(c, x, 1);
       if (x.qty > 0) { x.qty--; if (!sh.fromScenario) saveShops(); }
+      if (U.shopBought) U.shopBought(sh, Number(ds.i)); // online: tell the DM (his stock goes down)
       U.saveChars();
       U.logAdd(c.name || T('Hero'), ['🪙 ' + T('bought {0} for {1}', '<b>' + esc(E.itemName(it)) + '</b>', U.money(x.price)) + ' · ' + T('gold left: {0}', U.money(c.gold))]);
       U.render();

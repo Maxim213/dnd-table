@@ -120,7 +120,7 @@
     if (!d.C) h += '<div class="warn">' + T('This character has no class yet — click <b>Edit build</b>.') + '</div>';
 
     // stat strip
-    h += '<div class="strip">' +
+    let sStrip = '<div class="strip">' +
       '<div class="stat"><div class="sl">' + T('Armor Class') + ' ' + ib('ac') + '</div><div class="sv">' + d.ac + '</div><div class="ss acwhy">= ' + esc(d.acWhy) + '</div></div>' +
       '<div class="stat hp"><div class="sl">' + T('Hit Points') + ' ' + ib('hp') + '</div><div class="hpline"><input type="number" class="hpcur" data-on="hpCur" value="' + d.hpCur + '"> <span>/ ' + d.hpMax + '</span></div>' +
       '<div class="hpbar"><span style="width:' + hpPct + '%"></span></div>' +
@@ -134,23 +134,23 @@
 
     if (d.hpCur === 0) {
       const box = (k, i) => '<button class="ds ' + k + (c.deathSaves[k] > i ? ' on' : '') + '" data-act="dsSet" data-k="' + k + '" data-i="' + i + '"></button>';
-      h += '<div class="death"><b>💀 ' + T('At 0 HP — death saves') + ' ' + ib('deathsaves') + '</b> ' + T('Successes') + ' ' + [0, 1, 2].map(i => box('s', i)).join('') + ' ' + T('Failures') + ' ' + [0, 1, 2].map(i => box('f', i)).join('') +
+      sStrip += '<div class="death"><b>💀 ' + T('At 0 HP — death saves') + ' ' + ib('deathsaves') + '</b> ' + T('Successes') + ' ' + [0, 1, 2].map(i => box('s', i)).join('') + ' ' + T('Failures') + ' ' + [0, 1, 2].map(i => box('f', i)).join('') +
         ' <button class="primary" data-act="rollDeath">' + T('Roll death save') + '</button></div>';
     }
 
-    h += '<div class="cols">';
+    // the sheet is cut into tabs (a narrow Owlbear panel = a long scroll); 📖 All = the old 3-column page
     // --- left: abilities & skills
-    h += '<div class="col"><section><h3>' + T('Abilities') + ' ' + ib('abilities') + ' <small>' + T('click to roll') + '</small></h3><div class="abgrid">' + D.ABIL.map(a => {
+    let sAbil = '<section><h3>' + T('Abilities') + ' ' + ib('abilities') + ' <small>' + T('click to roll') + '</small></h3><div class="abgrid">' + D.ABIL.map(a => {
       const sv = d.saves[a];
       return '<div class="ab"><div class="an">' + D.ABIL_NAME[a] + '</div><button class="am" data-act="rollAbil" data-a="' + a + '" title="' + esc(T('Roll a {0} check', D.ABIL_NAME[a])) + '">' + sign(d.mod[a]) + '</button><div class="as">' + T('score {0}', d.score[a]) + '</div>' +
         '<button class="asv' + (sv.prof ? ' prof' : '') + '" data-act="rollSave" data-a="' + a + '">' + T('Save') + ' ' + sign(sv.val) + (sv.prof ? ' ●' : '') + '</button></div>';
     }).join('') + '</div><p class="hint">' + T('Big number = modifier (add to rolls). "Save" = saving throw') + ' ' + ib('saves') + '</p></section>';
-    h += '<section><h3>' + T('Skills') + ' ' + ib('skills') + ' <small>' + T('● trained ◆ expert') + '</small></h3><div class="skills">' + D.ALL_SKILLS.map(s => {
+    sAbil += '<section><h3>' + T('Skills') + ' ' + ib('skills') + ' <small>' + T('● trained ◆ expert') + '</small></h3><div class="skills">' + D.ALL_SKILLS.map(s => {
       const k = d.skills[s]; const dis = s === 'Stealth' && d.stealthDis;
       return '<button class="sk' + (k.lv ? ' prof' : '') + '" data-act="rollSkill" data-s="' + esc(s) + '" title="' + esc(D.SKILL_HELP[s]) + '"><span class="dot">' + (k.lv === 2 ? '◆' : k.lv ? '●' : '○') + '</span><span class="skn">' + t(s) + ' <small>' + AB(k.abil) + '</small>' + (dis ? ' <small class="fail">' + T('disadv.') + '</small>' : '') + '</span><b>' + sign(k.val) + '</b></button>';
     }).join('') + '</div><p class="hint">' + T('Hover a skill to see what it is for.') + '</p>';
     if (c.customSkills.length || DM) {
-      h += '<h4>' + T('Custom skills') + '</h4>' + c.customSkills.map(s => {
+      sAbil += '<h4>' + T('Custom skills') + '</h4>' + c.customSkills.map(s => {
         const v = d.mod[s.ability || 'STR'] + (Number(s.prof) || 0) * d.pb + (Number(s.bonus) || 0) + E.effSum(d.L, 'skills');
         return '<div class="cskill"><button class="sk prof" data-act="rollCSkill" data-id="' + s.id + '"><span class="dot">✦</span><span class="skn">' + esc(s.name || T('Skill')) + ' <small>' + AB(s.ability) + '</small></span><b>' + sign(v) + '</b></button>' +
           (DM ? '<div class="csed"><input data-on="csSet" data-id="' + s.id + '" data-f="name" value="' + esc(s.name) + '" placeholder="' + esc(T('name')) + '"><select data-on="csSet" data-id="' + s.id + '" data-f="ability">' + D.ABIL.map(a => opt(a, AB(a), s.ability)).join('') + '</select>' +
@@ -158,21 +158,22 @@
             '<input type="number" class="tiny" data-on="csSet" data-id="' + s.id + '" data-f="bonus" value="' + (s.bonus || 0) + '" title="' + esc(T('extra bonus')) + '"><button class="mini danger" data-act="csDel" data-id="' + s.id + '">✕</button></div>' : '') + '</div>';
       }).join('') + (DM ? '<button class="mini" data-act="csAdd">' + T('＋ Add custom skill') + '</button>' : '');
     }
-    h += '</section></div>';
+    sAbil += '</section>';
 
     // --- middle
-    h += '<div class="col wide">';
-    h += nowBox(c, d);
+
+    const sNow = nowBox(c, d);
     const weapons = d.actions.filter(a => a.kind === 'weapon').sort((a, b) => (b.equipped ? 1 : 0) - (a.equipped ? 1 : 0));
-    h += '<section><h3>' + T('Attacks') + ' ' + ib('attacks') + ' <small>' + T('click Roll, then tell the DM the numbers') + '</small></h3><table class="atk"><thead><tr><th>' + T('Weapon') + '</th><th>' + T('To hit') + '</th><th>' + T('Damage') + '</th><th></th></tr></thead><tbody>' +
+    const sAtk = '<section><h3>' + T('Attacks') + ' ' + ib('attacks') + ' <small>' + T('click Roll, then tell the DM the numbers') + '</small></h3><table class="atk"><thead><tr><th>' + T('Weapon') + '</th><th>' + T('To hit') + '</th><th>' + T('Damage') + '</th><th></th></tr></thead><tbody>' +
       weapons.map(a => '<tr class="' + (a.equipped ? '' : 'dim') + '"><td><b>' + esc(a.name) + '</b>' + (a.mastery ? ' <span class="tag" title="' + esc(D.MASTERIES[a.mastery]) + '">' + esc(t(a.mastery)) + '</span>' : '') + (a.mult !== 1 ? ' <span class="mult">×' + a.mult + '</span>' : '') + (a.count > 1 ? ' <span class="tag" title="' + esc(T('Extra Attack: the Roll button rolls all of them')) + '">' + T('{0} attacks', a.count) + '</span>' : '') + (!a.prof ? ' <span class="fail small">' + T('not trained') + '</span>' : '') +
         (a.equipped ? '' : ' <small>' + T('(not equipped)') + '</small>') + '</td><td>' + sign(a.hit) + '</td><td>' + esc(a.dmg) + ' <small>' + esc(t(a.dtype)) + ' · ≈' + Math.round(U.avgExpr(a.dmg) * (a.mult || 1)) + '</small>' + (a.critRange < 20 ? ' <small>' + T('crit {0}–20', a.critRange) + '</small>' : '') + '</td>' +
         '<td class="nowrap"><button class="mini primary" data-act="act" data-id="' + esc(a.id) + '">' + T('Roll') + '</button> <button class="mini" data-act="actDmg" data-id="' + esc(a.id) + '" title="' + esc(T('Only damage (you rolled the d20 yourself)')) + '">' + T('Dmg') + '</button></td></tr>').join('') + '</tbody></table>' +
       (weapons.some(a => a.mastery) ? '<p class="hint">' + T('Tags like <span class="tag">{0}</span> = weapon mastery', esc(t('Graze'))) + ' ' + ib('mastery') + ' ' + T('(hover to read).') + '</p>' : '') + '</section>';
 
     const ci = d.casting;
+    let sSp = '';
     if (ci.list.length || ci.ability) {
-      h += '<section><h3>' + T('Spells') + ' ' + ib('spells') + (ci.ability ? ' <small>' + T('attack') + ' ' + sign(ci.atk) + ' ' + ib('spellatk') + ' · ' + T('save DC') + ' ' + ci.dc + ' ' + ib('spelldc') + '</small>' : '') + '</h3>' +
+      sSp = '<section><h3>' + T('Spells') + ' ' + ib('spells') + (ci.ability ? ' <small>' + T('attack') + ' ' + sign(ci.atk) + ' ' + ib('spellatk') + ' · ' + T('save DC') + ' ' + ci.dc + ' ' + ib('spelldc') + '</small>' : '') + '</h3>' +
         '<p class="hint">' + T('C = cantrip (free, unlimited). 1, 2 = spell level: casting uses a slot of that level or higher. The ⚡ box above shows how many slots you have left.') + '</p>' +
         '<div class="spl">' + ci.list.map(e => {
           const sp = e.sp; const act = d.actions.find(a => a.id === 'sp:' + sp.n);
@@ -218,38 +219,52 @@
       return '<div class="ft' + (f.custom ? ' custom' : '') + '"><div class="fth"><b>' + esc(f.name) + '</b> <small>' + esc(f.src) + '</small><span class="ftc">' + ctl + '</span></div><div class="ftd">' + esc(f.desc) + (f.effects && f.effects.length ? ' <span class="fx">✨ ' + f.effects.map(fxText).join(', ') + '</span>' : '') + '</div></div>';
     };
     const useF = d.feats.filter(usable), passF = d.feats.filter(f => !usable(f));
-    h += '<section><h3>⚔️ ' + T('Powers you can use') + ' ' + ib('features') + ' <small>' + T('circles = uses left, click to use') + '</small></h3><div class="feats">' + (useF.length ? useF.map(featRow).join('') : '<p class="hint">' + T('Nothing with uses yet — your attacks and spells are above.') + '</p>') + '</div>';
-    if (passF.length) h += '<details class="passive"><summary>📜 ' + T('Always on and already counted ({0})', passF.length) + ' <small>' + T('passive bonuses and choices you made — the app already uses them') + '</small></summary><div class="feats">' + passF.map(featRow).join('') + '</div></details>';
+    let sPow = '<section><h3>⚔️ ' + T('Powers you can use') + ' ' + ib('features') + ' <small>' + T('circles = uses left, click to use') + '</small></h3><div class="feats">' + (useF.length ? useF.map(featRow).join('') : '<p class="hint">' + T('Nothing with uses yet — your attacks and spells are above.') + '</p>') + '</div>';
+    if (passF.length) sPow += '<details class="passive"><summary>📜 ' + T('Always on and already counted ({0})', passF.length) + ' <small>' + T('passive bonuses and choices you made — the app already uses them') + '</small></summary><div class="feats">' + passF.map(featRow).join('') + '</div></details>';
     const hd = resById.hd;
-    h += '<div class="hdrow"><b>' + T('Hit Dice') + ' ' + ib('hitdice') + '</b> ' + U.pips(hd.max, Number(c.used.hd) || 0, 'pip', 'hd') + ' <button class="mini" data-act="spendHD">' + T('Spend 1 to heal (d{0} {1})', d.C ? d.C.hitDie : 8, sign(d.mod.CON)) + '</button> <small>' + T('only during a Short Rest') + '</small></div></section>';
+    sPow += '<div class="hdrow"><b>' + T('Hit Dice') + ' ' + ib('hitdice') + '</b> ' + U.pips(hd.max, Number(c.used.hd) || 0, 'pip', 'hd') + ' <button class="mini" data-act="spendHD">' + T('Spend 1 to heal (d{0} {1})', d.C ? d.C.hitDie : 8, sign(d.mod.CON)) + '</button> <small>' + T('only during a Short Rest') + '</small></div></section>';
 
+    let sCust = '';
     if (DM) {
-      h += '<section><h3>' + T('✨ Custom features & homebrew') + ' <small>' + T('DM: invent anything — it can roll dice and change numbers') + '</small></h3>' +
+      sCust = '<section><h3>' + T('✨ Custom features & homebrew') + ' <small>' + T('DM: invent anything — it can roll dice and change numbers') + '</small></h3>' +
         (c.custom.length ? c.custom.map(f => '<div class="cfrow"><b>' + esc(f.name || T('New feature')) + '</b> <button class="mini" data-act="cfEdit" data-id="' + f.id + '">' + (S.editing['cf:' + f.id] ? T('Done') : T('✎ Edit')) + '</button> <button class="mini danger" data-act="cfDel" data-id="' + f.id + '">✕</button>' +
           (S.editing['cf:' + f.id] ? customEditor(f) : '') + '</div>').join('') : '<p class="hint">' + T('Example: “Lucky Coin — once per Long Rest add 1d4 to a roll”, or “Berserk Blood — damage +2 while ON”.') + '</p>') +
         '<button class="mini" data-act="cfAdd">' + T('＋ Add custom feature') + '</button></section>';
     }
-    h += '</div>';
+
 
     // --- right
-    h += '<div class="col">';
+
     const att = c.inventory.filter(i => i.attuned).length;
-    h += '<section><h3>' + T('Inventory') + ' <small>' + (DM ? T('Gold') + ' <input type="number" class="tiny" data-on="bindNum" data-path="gold" value="' + (c.gold || 0) + '"> ' + T('GP') + ' · ' + T('Attuned {0}/3', att) : T('Gold {0} GP', c.gold || 0)) + '</small></h3>' +
+    const sInv = '<section><h3>' + T('Inventory') + ' <small>' + (DM ? T('Gold') + ' <input type="number" class="tiny" data-on="bindNum" data-path="gold" value="' + (c.gold || 0) + '"> ' + T('GP') + ' · ' + T('Attuned {0}/3', att) : T('Gold {0} GP', c.gold || 0)) + '</small></h3>' +
       U.invRows(c, DM ? 'dm' : 'view') + (DM ? U.addItemControls() : '<p class="hint">' + T('Tick ✔ for what you wear and hold. New items come from your DM.') + '</p>') + '</section>';
-    h += '<section><h3>' + T('Conditions') + ' ' + ib('conditions') + '</h3><div class="chips">' + U.condChips(c, 'condDel', '') + U.condAdder('condAdd', '') + '</div>' +
+    const sCond = '<section><h3>' + T('Conditions') + ' ' + ib('conditions') + '</h3><div class="chips">' + U.condChips(c, 'condDel', '') + U.condAdder('condAdd', '') + '</div>' +
       (c.conditions.length ? '<ul class="condl">' + c.conditions.map(x => '<li><b>' + esc(t(x)) + (c.condDur[x] ? ' (' + T('{0} rounds left', c.condDur[x]) + ')' : '') + ':</b> ' + esc(D.CONDITIONS[x] || '') + '</li>').join('') + '</ul>' : '') + '</section>';
     const det = c.details;
     const lab = { who: T('Who'), want: T('Wants'), flaw: T('Flaw'), secret: T('Secret'), appearance: T('Looks') };
-    h += '<section><h3>' + T('Personality & notes') + '</h3>' + ['who', 'want', 'flaw', 'secret', 'appearance'].map(k => '<label class="blk">' + lab[k] + '<textarea data-on="bind" data-path="details.' + k + '">' + esc(det[k] || '') + '</textarea></label>').join('') +
+    let sNotes = '<section><h3>' + T('Personality & notes') + '</h3>' + ['who', 'want', 'flaw', 'secret', 'appearance'].map(k => '<label class="blk">' + lab[k] + '<textarea data-on="bind" data-path="details.' + k + '">' + esc(det[k] || '') + '</textarea></label>').join('') +
       '<label class="blk">' + T('Notes') + '<textarea class="tall" data-on="bind" data-path="notes" placeholder="' + esc(T('Quests, NPC names, loot…')) + '">' + esc(c.notes) + '</textarea></label></section>';
     if (DM) {
       const ov = c.overrides;
-      h += '<section class="adv"><h3>' + T('Manual overrides') + ' <small>' + T('DM · empty = automatic') + '</small></h3><div class="ovr">' +
+      sNotes += '<section class="adv"><h3>' + T('Manual overrides') + ' <small>' + T('DM · empty = automatic') + '</small></h3><div class="ovr">' +
         [['ac', T('AC'), d.ac], ['hpMax', T('Max HP'), d.hpMax], ['speed', T('Speed'), d.speed], ['init', T('Initiative'), d.init]].map(o => '<label class="inl">' + o[1] + ' <input type="number" class="tiny" data-on="bind" data-path="overrides.' + o[0] + '" value="' + esc(ov[o[0]] == null ? '' : ov[o[0]]) + '" placeholder="' + o[2] + '"></label>').join('') + '</div></section>';
     }
-    h += '</div></div></div>';
+    // tabs: one topic per screen; 📖 All = everything in 3 columns (big screen, print)
+    const TABS = [['main', '📜 ' + T('Main')], ['act', '⚔️ ' + T('Actions')]].concat(sSp ? [['spells', '✨ ' + T('Spells')]] : []).concat([['inv', '🎒 ' + T('Bag') + ' (' + c.inventory.length + ')'], ['notes', '📝 ' + T('Notes')], ['all', '📖 ' + T('All')]]);
+    let tab = S.sheetTab || U.raw.get('sheetTab', 'main'); if (!TABS.some(x => x[0] === tab)) tab = 'main';
+    h += '<div class="sheettabs">' + TABS.map(x => '<button class="' + (x[0] === tab ? 'on' : '') + '" data-act="sheetTab" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>';
+    if (tab === 'all') h += sStrip + '<div class="cols"><div class="col">' + sAbil + '</div><div class="col wide">' + sNow + sAtk + sSp + sPow + sCust + '</div><div class="col">' + sInv + sCond + sNotes + '</div></div>';
+    else h += '<div class="sheetone">' + ({
+      main: sStrip + sCond + sAbil,
+      act: sStrip + sNow + sAtk + sPow + sCust,
+      spells: sNow + sSp,
+      inv: sInv,
+      notes: sNotes
+    }[tab] || '') + '</div>';
+    h += '</div>';
     return h;
   };
+  U.ACT.sheetTab = ds => { S.sheetTab = ds.v; U.raw.set('sheetTab', ds.v); U.render(); window.scrollTo(0, 0); };
 
   // ======================================================================
   //  SHEET ACTIONS
@@ -276,7 +291,7 @@
   };
 
   Object.assign(U.ACT, {
-    print: () => window.print(),
+    print: () => { const was = S.sheetTab; S.sheetTab = 'all'; U.render(); setTimeout(() => { window.print(); S.sheetTab = was; U.render(); }, 50); },
     rollAbil: ds => { const c = U.cur(); const d = E.compute(c); const jack = c.classKey === 'bard' && c.level >= 2 ? Math.floor(d.pb / 2) : 0; d20Roll(c, T('{0} check', D.ABIL_NAME[ds.a]), d.mod[ds.a] + jack); },
     rollSave: ds => { const c = U.cur(); const d = E.compute(c); d20Roll(c, T('{0} save', D.ABIL_NAME[ds.a]), d.saves[ds.a].val); },
     rollSkill: ds => { const c = U.cur(); const d = E.compute(c); d20Roll(c, t(ds.s), d.skills[ds.s].val, ds.s === 'Stealth' && d.stealthDis ? 'dis' : null); },
