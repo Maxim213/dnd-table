@@ -113,6 +113,7 @@
       '<div class="btnrow">' + (locked && !c.lvlOpen ? '' : '<button data-act="openBuilder" data-id="' + c.id + '">' + T('✎ Edit build') + '</button>') +
       '<button data-act="shortRest">' + T('☕ Short rest') + '</button><button data-act="longRest">' + T('🌙 Long rest') + '</button>' + ib('rests') +
       (DM ? '<button data-act="addToCombat" data-id="' + c.id + '">' + T('⚔️ Add to combat') + '</button><button data-act="exportChar" data-id="' + c.id + '">' + T('📤 Export for player') + '</button>' : '<button data-act="exportChar" data-id="' + c.id + '">' + T('📤 Send to DM') + '</button>') +
+      '<button data-act="tokenPick" data-k="hero" data-id="' + c.id + '">🖼 ' + T('Token') + '</button>' +
       '<button data-act="print">' + T('🖨 Print') + '</button></div></div></div>';
     if (U.xpBox) h += U.xpBox(c, d);
     if (d.warnings.length) h += '<div class="warn">' + d.warnings.map(esc).join('<br>') + '</div>';
@@ -250,7 +251,7 @@
         [['ac', T('AC'), d.ac], ['hpMax', T('Max HP'), d.hpMax], ['speed', T('Speed'), d.speed], ['init', T('Initiative'), d.init]].map(o => '<label class="inl">' + o[1] + ' <input type="number" class="tiny" data-on="bind" data-path="overrides.' + o[0] + '" value="' + esc(ov[o[0]] == null ? '' : ov[o[0]]) + '" placeholder="' + o[2] + '"></label>').join('') + '</div></section>';
     }
     // tabs: one topic per screen; 📖 All = everything in 3 columns (big screen, print)
-    const TABS = [['main', '📜 ' + T('Main')], ['act', '⚔️ ' + T('Actions')]].concat(sSp ? [['spells', '✨ ' + T('Spells')]] : []).concat([['inv', '🎒 ' + T('Bag') + ' (' + c.inventory.length + ')'], ['notes', '📝 ' + T('Notes')], ['all', '📖 ' + T('All')]]);
+    const TABS = [['main', '🪪 ' + T('Card')], ['act', '⚔️ ' + T('Actions')]].concat(sSp ? [['spells', '✨ ' + T('Spells')]] : []).concat([['inv', '🎒 ' + T('Bag') + ' (' + c.inventory.length + ')'], ['notes', '📝 ' + T('Notes')], ['log', '📜 ' + T('Log')], ['dice', '🎲 ' + T('Rolls')], ['all', '📖 ' + T('All')]]);
     let tab = S.sheetTab || U.raw.get('sheetTab', 'main'); if (!TABS.some(x => x[0] === tab)) tab = 'main';
     h += '<div class="sheettabs">' + TABS.map(x => '<button class="' + (x[0] === tab ? 'on' : '') + '" data-act="sheetTab" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>';
     if (tab === 'all') h += sStrip + '<div class="cols"><div class="col">' + sAbil + '</div><div class="col wide">' + sNow + sAtk + sSp + sPow + sCust + '</div><div class="col">' + sInv + sCond + sNotes + '</div></div>';
@@ -259,10 +260,24 @@
       act: sStrip + sNow + sAtk + sPow + sCust,
       spells: sNow + sSp,
       inv: sInv,
-      notes: sNotes
+      notes: sNotes,
+      log: '<div id="sheetLog">' + U.logHtml() + '</div>',
+      dice: '<div id="sheetDice">' + U.diceHtml() + '</div><div id="sheetLog">' + U.logHtml() + '</div>' // the result shows right under the dice
     }[tab] || '') + '</div>';
     h += '</div>';
     return h;
+  };
+  // 🖼 the picture on the map: any image link (or empty = automatic: a file in assets/tokens/custom/ named like it, else our round default)
+  U.ACT.tokenPick = ds => {
+    const isHero = ds.k === 'hero'; const c = isHero ? U.byId(ds.id) : null; if (isHero && !c) return;
+    const L = U.store.get('tokenLinks', {}); const key = String(ds.n || '').trim().toLowerCase().replace(/ё/g, 'е');
+    const now = isHero ? c.token || '' : L[key] || '';
+    const v = prompt(T('Token picture for {0} — paste an image link (png / jpg / webp). Empty = automatic.', isHero ? c.name : ds.n), now);
+    if (v == null) return; const url = v.trim();
+    if (url && !/^https?:\/\/\S+$/i.test(url)) { U.toast(T('⚠️ That is not a link (it must start with https://).')); return; }
+    if (isHero) { if (url) c.token = url; else delete c.token; U.saveChars(); }
+    else { if (url) L[key] = url; else delete L[key]; U.store.set('tokenLinks', L); }
+    U.toast('🖼 ' + (url ? T('Saved. New tokens on the map get this picture.') : T('Back to the automatic picture.'))); U.render();
   };
   U.ACT.sheetTab = ds => { S.sheetTab = ds.v; U.raw.set('sheetTab', ds.v); U.render(); window.scrollTo(0, 0); };
 

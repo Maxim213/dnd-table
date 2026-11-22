@@ -315,7 +315,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     return '<div class="detail balrow"><b>⚖️ ' + T('Strength (CR)') + '</b> ' + ib('cr') + ' ' + crSelect('prevCr', cr, ' data-on="monPrevCr"') +
       '<br><small>' + T('In D&D this monster is {0}. Pick any other CR: the numbers below balance themselves (your party: level {1}).', crShort(m.cr), partyLevel()) + '</small></div>' +
       statBlock(shown) +
-      '<p class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + (cr !== m.cr ? ' (' + crShort(cr) + ')' : '') + '</button>' + (U.obrToScene ? '<button data-act="monToScene" data-id="' + m.id + '">🗺 ' + T('Onto the scene') + '</button>' : '') +
+      '<p class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + (cr !== m.cr ? ' (' + crShort(cr) + ')' : '') + '</button>' + (U.obrToScene ? '<button data-act="monToScene" data-id="' + m.id + '">🗺 ' + T('Onto the scene') + '</button><button data-act="tokenPick" data-k="mon" data-n="' + esc(m.name) + '">🖼 ' + T('Token') + '</button>' : '') +
       '<button data-act="monCopy" data-id="' + m.id + '">' + T('Copy to my monsters & edit') + '</button></p>';
   }
   function newMonsterForm(mons) {

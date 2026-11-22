@@ -553,3 +553,5 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 .sheettabs button.on { background: var(--gold, #d9a441); color: #1c140b; border-color: var(--gold, #d9a441); font-weight: 700; }
 .sheetone > section, .sheetone > .strip, .sheetone > .now, .sheetone > div { margin-bottom: 14px; }
 @media print { .sheettabs { display: none; } }
+@media (max-width: 1000px) { body.on-sheet #side { display: none; } } /* narrow panel: dice and log are tabs of the sheet */
+#sheetDice .panel, #sheetLog .panel { margin-bottom: 12px; }

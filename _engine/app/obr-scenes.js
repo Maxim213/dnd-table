@@ -10,19 +10,29 @@
   const T = U.T, S = U.S, D = U.D, E = U.E, esc = U.esc;
   const OBR = window.OBR;
   const GD = 150; // Owlbear's scene grid: 150 px per square
-  const tokURL = k => new URL('assets/tokens/' + k + '.png', document.baseURI).href;
+  const tokURL = k => /^(https?:|data:|blob:)/.test(k) ? k : new URL('assets/tokens/' + k + (/\.[a-z0-9]+$/i.test(k) ? '' : '.png'), document.baseURI).href;
 
+  // ---------- custom token pictures ----------
+  // 1) a picture link on the hero / monster (c.token / the game's token list: 🖼 button), 2) a file in assets/tokens/custom/ named like the creature
+  //    ("Серафина.png", "Skeleton.webp" — the list is assets/tokens/custom/index.json, made by _engine/make_token_index.ps1), 3) our round default
+  const norm = s => String(s || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+\d+$/, ''); // "Скелет 2" → "скелет"
+  let customFiles = {};
+  fetch(new URL('assets/tokens/custom/index.json', document.baseURI).href, { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(L => { (Array.isArray(L) ? L : []).forEach(f => { customFiles[norm(String(f).replace(/\.[a-z0-9]+$/i, ''))] = 'custom/' + f; }); }).catch(() => {});
+  const tokenLinks = () => (U.store && U.store.get('tokenLinks', {})) || {}; // the DM's links per monster name
+  const customOf = (...names) => { const L = tokenLinks(); for (const n of names) { const k = norm(n); if (!k) continue; if (L[k]) return L[k]; if (customFiles[k]) return customFiles[k]; } return ''; };
+  U.tokenOfName = n => customOf(n);
   // ---------- which picture for which creature ----------
   const SPECIAL = [[/goblin|гоблин|hobgoblin|bugbear/i, 'goblin'], [/ogre|огр|orc|орк|troll|тролл/i, 'ogre'], [/zombie|зомби|ghoul|гул/i, 'zombie'], [/spider|паук/i, 'spider'],
     [/\brat\b|крыс/i, 'rat'], [/\bbat\b|летуч/i, 'bat'], [/snake|змея|serpent/i, 'snake'], [/bear|медвед/i, 'bear'], [/ghost|призрак|specter|wraith|banshee/i, 'ghost'],
     [/vampire|вампир/i, 'vampire'], [/mage|маг|priest|жрец|cultist|культист|warlock|колдун/i, 'mage'], [/wolf|волк|worg|ворг/i, 'wolf']];
   function monToken(m) {
+    const own = m.token || customOf(m.name, m.en, String(m.id || '').replace(/^srd:/, '')); if (own) return own;
     const s = (m.id || '') + ' ' + (m.name || '') + ' ' + (m.en || '');
     for (const [re, k] of SPECIAL) if (re.test(s)) return k;
     const ty = m.type || (D.MONSTERS[String(m.id || '').replace(/^srd:/, '')] || {}).type;
     return D.MON_TYPES && D.MON_TYPES[ty] ? ty : 'humanoid';
   }
-  const heroToken = c => ['barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard'].includes(c.classKey) ? c.classKey : 'hero';
+  const heroToken = c => c.token || customOf(c.name) || ['barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard'].includes(c.classKey) ? c.classKey : 'hero';
 
   // ---------- the map maker ----------
   function rnd(seed) { let s = (Number(seed) >>> 0) || 7; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
@@ -194,14 +204,22 @@
 
   // ---------- build an Owlbear scene and upload it ----------
   const B = () => window.OBR_SDK;
+  // a custom picture can be any size: learn it first (one square = its longer side)
+  const SIZE = {};
+  const sized = keys => Promise.all([...new Set(keys)].filter(k => k && !SIZE[k] && (/^(https?:|data:|blob:|custom\/)/.test(k))).map(k => new Promise(ok => {
+    const im = new Image(); im.onload = () => { SIZE[k] = [im.naturalWidth || 256, im.naturalHeight || 256]; ok(); }; im.onerror = () => { SIZE[k] = [256, 256]; ok(); }; im.src = tokURL(k);
+  })));
+  const mimeOf = k => /\.jpe?g(\?|$)/i.test(k) ? 'image/jpeg' : /\.webp(\?|$)/i.test(k) ? 'image/webp' : /\.gif(\?|$)/i.test(k) ? 'image/gif' : /^data:([^;]+)/.test(k) ? k.match(/^data:([^;]+)/)[1] : 'image/png';
   function tokenItem(name, key, cx, cy, hidden, meta) {
-    return B().buildImage({ url: tokURL(key), mime: 'image/png', width: 256, height: 256 }, { dpi: 256, offset: { x: 128, y: 128 } })
+    const [w, h] = SIZE[key] || [256, 256]; const dpi = Math.max(w, h);
+    return B().buildImage({ url: tokURL(key), mime: mimeOf(key), width: w, height: h }, { dpi, offset: { x: w / 2, y: h / 2 } })
       .position({ x: (cx + 0.5) * GD, y: (cy + 0.5) * GD }).layer('CHARACTER').name(name).plainText(name).visible(!hidden).locked(false).metadata(meta || {}).build();
   }
   // o: { name, mapBlob, cellPx, W, H, tokens: [{ name, key, x, y, hidden }], walls: [[x1, y1, x2, y2]…] (squares), fog }
   async function upload(o) {
     const b = B(); if (!b || !b.buildSceneUpload || !OBR || !OBR.assets) throw new Error(T('Owlbear does not allow uploads here.'));
     const base = b.buildImageUpload(o.mapBlob).dpi(o.cellPx).name(o.name).locked(true).build();
+    await sized(o.tokens.map(t => t.key));
     const items = o.tokens.map(t => tokenItem(t.name, t.key, t.x, t.y, t.hidden));
     // Owlbear's own WALL items (its Dynamic Fog extension can use them) — optional extras, dropped if Owlbear refuses them
     const extra = (o.walls || []).map(([x1, y1, x2, y2]) => b.buildWall().points([{ x: x1 * GD, y: y1 * GD }, { x: x2 * GD, y: y2 * GD }]).doubleSided(true).blocking(true).locked(true).build());
@@ -227,6 +245,7 @@
   async function blobOf(url) { return await (await fetch(url)).blob(); }
   // a hero's small round avatar (his portrait in a gold ring, ~10 KB); no portrait → the class picture
   async function heroAvatar(c) {
+    const own = c.token || customOf(c.name); if (own) { await sized([own]); return { blob: await blobOf(tokURL(own)), px: Math.max(...(SIZE[own] || [256, 256])) }; } // a picked token picture wins
     const src = c.portraitThumb || (String(c.portrait || '').startsWith('data:') && c.portrait.length < 60000 ? c.portrait : '');
     if (!src) return { blob: await blobOf(tokURL(heroToken(c))), px: 256 };
     const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = src; });
@@ -247,7 +266,8 @@
     const b = B(); if (!b || !b.buildImageUpload || !OBR.assets || !OBR.assets.uploadImages) throw new Error(T('Owlbear does not allow uploads here.'));
     const done = libDone(); const imgs = [];
     for (const c of heroes) { const k = 'h:' + c.id; if (done[k] && !force) continue; const a = await heroAvatar(c); imgs.push(b.buildImageUpload(a.blob).dpi(a.px).name(c.name).build()); done[k] = 1; }
-    for (const m of mons) { const k = 'm:' + m.name; if (done[k] && !force) continue; imgs.push(b.buildImageUpload(await blobOf(tokURL(m.key))).dpi(256).name(m.name).build()); done[k] = 1; }
+    await sized(mons.map(m => m.key));
+    for (const m of mons) { const k = 'm:' + m.name; if (done[k] && !force) continue; imgs.push(b.buildImageUpload(await blobOf(tokURL(m.key))).dpi(Math.max(...(SIZE[m.key] || [256, 256]))).name(m.name).build()); done[k] = 1; }
     if (imgs.length) await OBR.assets.uploadImages(imgs, 'CHARACTER');
     try { localStorage.setItem('dnd.obrLib', JSON.stringify(done)); } catch (e) {}
     return imgs.length;
@@ -256,6 +276,7 @@
   async function toScene(list) {
     const w = await OBR.viewport.getWidth(), h = await OBR.viewport.getHeight(), s = await OBR.viewport.getScale(), p = await OBR.viewport.getPosition();
     const cx = Math.floor(((w / 2 - p.x) / s) / GD), cy = Math.floor(((h / 2 - p.y) / s) / GD);
+    await sized(list.map(t => t.key));
     const add = list.map((t, i) => tokenItem(t.name, t.key, cx + (i % 5) - 2, cy + Math.floor(i / 5), !!t.hidden, t.meta));
     if (add.length) await OBR.scene.items.addItems(add);
     return add.length;
@@ -432,6 +453,7 @@
       const have = new Set((await OBR.scene.items.getItems(it => it.layer === 'CHARACTER')).map(it => String(it.name || '').trim().toLowerCase()));
       const w = await OBR.viewport.getWidth(), h = await OBR.viewport.getHeight(), s = await OBR.viewport.getScale(), p = await OBR.viewport.getPosition();
       const cx = Math.floor(((w / 2 - p.x) / s) / GD), cy = Math.floor(((h / 2 - p.y) / s) / GD);
+      await sized(list.map(heroToken));
       const add = list.filter(c => !have.has(String(c.name || '').trim().toLowerCase())).map((c, i) => tokenItem(c.name, heroToken(c), cx + (i % 4), cy + Math.floor(i / 4), false));
       if (!add.length) { msg(T('All heroes are already on the scene.')); return; }
       await OBR.scene.items.addItems(add); msg('✅ ' + T('{0} heroes put on the scene. Each player can now move only his own.', add.length));

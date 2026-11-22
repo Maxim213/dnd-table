@@ -560,6 +560,8 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 .sheettabs button.on { background: var(--gold, #d9a441); color: #1c140b; border-color: var(--gold, #d9a441); font-weight: 700; }
 .sheetone > section, .sheetone > .strip, .sheetone > .now, .sheetone > div { margin-bottom: 14px; }
 @media print { .sheettabs { display: none; } }
+@media (max-width: 1000px) { body.on-sheet #side { display: none; } } /* narrow panel: dice and log are tabs of the sheet */
+#sheetDice .panel, #sheetLog .panel { margin-bottom: 12px; }
 
 </style>
 </head>
@@ -6268,6 +6270,14 @@ window.DND_RU.UI = {
   'The DM gives XP.': 'Опыт даёт мастер.',
   'Main': 'Основное',
   'Bag': 'Инвентарь',
+  'Card': 'Карточка',
+  'Rolls': 'Броски',
+  'Token': 'Токен',
+  'Token picture for {0} — paste an image link (png / jpg / webp). Empty = automatic.': 'Картинка токена для «{0}» — вставь ссылку на картинку (png / jpg / webp). Пусто = автоматически.',
+  '⚠️ That is not a link (it must start with https://).': '⚠️ Это не ссылка (она должна начинаться с https://).',
+  'Saved. New tokens on the map get this picture.': 'Сохранено. Новые токены на карте будут с этой картинкой.',
+  'Back to the automatic picture.': 'Снова автоматическая картинка.',
+  'Log': 'Журнал',
   'Actions': 'Действия',
   'The map did not answer — try again or use the panel.': 'Карта не ответила — попробуй ещё раз или ходи через панель.',
   'Try again': 'Ещё раз',
@@ -7631,11 +7641,10 @@ window.UI = (function () {
   // ======================================================================
   //  SIDE PANEL — dice + log
   // ======================================================================
-  U.renderSide = function () {
-    const el = document.getElementById('side'); if (!el) return;
+  // the dice roller and the roll log: in the side column on a wide screen; on the hero sheet they are also tabs (🎲 / 📜)
+  U.diceHtml = function () {
     const m = S.mode;
-    el.innerHTML =
-      '<div class="panel dice">' +
+    return '<div class="panel dice">' +
       '<div class="modes"><button class="' + (m === 'normal' ? 'on' : '') + '" data-act="mode" data-v="normal">' + T('Normal') + '</button>' +
       '<button class="' + (m === 'adv' ? 'on adv' : '') + '" data-act="mode" data-v="adv">' + T('Advantage') + '</button>' +
       '<button class="' + (m === 'dis' ? 'on dis' : '') + '" data-act="mode" data-v="dis">' + T('Disadvantage') + '</button></div>' +
@@ -7643,9 +7652,16 @@ window.UI = (function () {
       '<div class="dbtns">' + [4, 6, 8, 10, 12, 20, 100].map(n => '<button data-act="die" data-n="' + n + '">d' + n + '</button>').join('') + '</div>' +
       '<form class="expr" data-form="expr"><input name="e" placeholder="' + esc(T('e.g. 2d6+3')) + '" autocomplete="off"><button>' + T('Roll') + '</button></form>' +
       '<label class="animtoggle"><input type="checkbox" data-on="anim"' + (U.animOn() ? ' checked' : '') + '> ' + T('🎲 Dice animation') + '</label> ' + U.ib('diceanim') +
-      '</div>' +
-      '<div class="panel log"><div class="lh"><b>' + T('Roll log') + '</b><button class="link" data-act="clearLog">' + T('clear') + '</button></div>' +
+      '</div>';
+  };
+  U.logHtml = function () {
+    return '<div class="panel log"><div class="lh"><b>' + T('Roll log') + '</b><button class="link" data-act="clearLog">' + T('clear') + '</button></div>' +
       (S.log.length ? S.log.map(x => '<div class="le">' + x.html + '</div>').join('') : '<div class="empty">' + T('Rolls appear here.') + '</div>') + '</div>';
+  };
+  U.renderSide = function () {
+    const el = document.getElementById('side'); if (el) el.innerHTML = U.diceHtml() + U.logHtml();
+    const sl = document.getElementById('sheetLog'); if (sl) sl.innerHTML = U.logHtml(); // the 📜 tab of the hero sheet
+    const sd = document.getElementById('sheetDice'); if (sd && !sd.contains(document.activeElement)) sd.innerHTML = U.diceHtml();
   };
 
   // ======================================================================
@@ -7661,6 +7677,7 @@ window.UI = (function () {
     const gt = document.getElementById('gameTag');
     if (gt) gt.innerHTML = U.game ? '🎲 ' + esc(U.game.name) : '🎲 ' + T('No game open');
     document.querySelectorAll('.need-game').forEach(b => { b.disabled = U.DM && !U.game; });
+    document.body.classList.toggle('on-sheet', v === 'sheet'); // narrow screen: the sheet has its own 🎲 / 📜 tabs
     U.renderSide(); if (v !== 'games') { store.set('view', S.view); store.set('charId', S.charId); }
   };
   U.go = (view, id) => { S.view = view; if (id) S.charId = id; U.render(); window.scrollTo(0, 0); };
@@ -8515,6 +8532,7 @@ window.UI = (function () {
       '<div class="btnrow">' + (locked && !c.lvlOpen ? '' : '<button data-act="openBuilder" data-id="' + c.id + '">' + T('✎ Edit build') + '</button>') +
       '<button data-act="shortRest">' + T('☕ Short rest') + '</button><button data-act="longRest">' + T('🌙 Long rest') + '</button>' + ib('rests') +
       (DM ? '<button data-act="addToCombat" data-id="' + c.id + '">' + T('⚔️ Add to combat') + '</button><button data-act="exportChar" data-id="' + c.id + '">' + T('📤 Export for player') + '</button>' : '<button data-act="exportChar" data-id="' + c.id + '">' + T('📤 Send to DM') + '</button>') +
+      '<button data-act="tokenPick" data-k="hero" data-id="' + c.id + '">🖼 ' + T('Token') + '</button>' +
       '<button data-act="print">' + T('🖨 Print') + '</button></div></div></div>';
     if (U.xpBox) h += U.xpBox(c, d);
     if (d.warnings.length) h += '<div class="warn">' + d.warnings.map(esc).join('<br>') + '</div>';
@@ -8652,7 +8670,7 @@ window.UI = (function () {
         [['ac', T('AC'), d.ac], ['hpMax', T('Max HP'), d.hpMax], ['speed', T('Speed'), d.speed], ['init', T('Initiative'), d.init]].map(o => '<label class="inl">' + o[1] + ' <input type="number" class="tiny" data-on="bind" data-path="overrides.' + o[0] + '" value="' + esc(ov[o[0]] == null ? '' : ov[o[0]]) + '" placeholder="' + o[2] + '"></label>').join('') + '</div></section>';
     }
     // tabs: one topic per screen; 📖 All = everything in 3 columns (big screen, print)
-    const TABS = [['main', '📜 ' + T('Main')], ['act', '⚔️ ' + T('Actions')]].concat(sSp ? [['spells', '✨ ' + T('Spells')]] : []).concat([['inv', '🎒 ' + T('Bag') + ' (' + c.inventory.length + ')'], ['notes', '📝 ' + T('Notes')], ['all', '📖 ' + T('All')]]);
+    const TABS = [['main', '🪪 ' + T('Card')], ['act', '⚔️ ' + T('Actions')]].concat(sSp ? [['spells', '✨ ' + T('Spells')]] : []).concat([['inv', '🎒 ' + T('Bag') + ' (' + c.inventory.length + ')'], ['notes', '📝 ' + T('Notes')], ['log', '📜 ' + T('Log')], ['dice', '🎲 ' + T('Rolls')], ['all', '📖 ' + T('All')]]);
     let tab = S.sheetTab || U.raw.get('sheetTab', 'main'); if (!TABS.some(x => x[0] === tab)) tab = 'main';
     h += '<div class="sheettabs">' + TABS.map(x => '<button class="' + (x[0] === tab ? 'on' : '') + '" data-act="sheetTab" data-v="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>';
     if (tab === 'all') h += sStrip + '<div class="cols"><div class="col">' + sAbil + '</div><div class="col wide">' + sNow + sAtk + sSp + sPow + sCust + '</div><div class="col">' + sInv + sCond + sNotes + '</div></div>';
@@ -8661,10 +8679,24 @@ window.UI = (function () {
       act: sStrip + sNow + sAtk + sPow + sCust,
       spells: sNow + sSp,
       inv: sInv,
-      notes: sNotes
+      notes: sNotes,
+      log: '<div id="sheetLog">' + U.logHtml() + '</div>',
+      dice: '<div id="sheetDice">' + U.diceHtml() + '</div><div id="sheetLog">' + U.logHtml() + '</div>' // the result shows right under the dice
     }[tab] || '') + '</div>';
     h += '</div>';
     return h;
+  };
+  // 🖼 the picture on the map: any image link (or empty = automatic: a file in assets/tokens/custom/ named like it, else our round default)
+  U.ACT.tokenPick = ds => {
+    const isHero = ds.k === 'hero'; const c = isHero ? U.byId(ds.id) : null; if (isHero && !c) return;
+    const L = U.store.get('tokenLinks', {}); const key = String(ds.n || '').trim().toLowerCase().replace(/ё/g, 'е');
+    const now = isHero ? c.token || '' : L[key] || '';
+    const v = prompt(T('Token picture for {0} — paste an image link (png / jpg / webp). Empty = automatic.', isHero ? c.name : ds.n), now);
+    if (v == null) return; const url = v.trim();
+    if (url && !/^https?:\/\/\S+$/i.test(url)) { U.toast(T('⚠️ That is not a link (it must start with https://).')); return; }
+    if (isHero) { if (url) c.token = url; else delete c.token; U.saveChars(); }
+    else { if (url) L[key] = url; else delete L[key]; U.store.set('tokenLinks', L); }
+    U.toast('🖼 ' + (url ? T('Saved. New tokens on the map get this picture.') : T('Back to the automatic picture.'))); U.render();
   };
   U.ACT.sheetTab = ds => { S.sheetTab = ds.v; U.raw.set('sheetTab', ds.v); U.render(); window.scrollTo(0, 0); };
 
@@ -9121,7 +9153,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     return '<div class="detail balrow"><b>⚖️ ' + T('Strength (CR)') + '</b> ' + ib('cr') + ' ' + crSelect('prevCr', cr, ' data-on="monPrevCr"') +
       '<br><small>' + T('In D&D this monster is {0}. Pick any other CR: the numbers below balance themselves (your party: level {1}).', crShort(m.cr), partyLevel()) + '</small></div>' +
       statBlock(shown) +
-      '<p class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + (cr !== m.cr ? ' (' + crShort(cr) + ')' : '') + '</button>' + (U.obrToScene ? '<button data-act="monToScene" data-id="' + m.id + '">🗺 ' + T('Onto the scene') + '</button>' : '') +
+      '<p class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + (cr !== m.cr ? ' (' + crShort(cr) + ')' : '') + '</button>' + (U.obrToScene ? '<button data-act="monToScene" data-id="' + m.id + '">🗺 ' + T('Onto the scene') + '</button><button data-act="tokenPick" data-k="mon" data-n="' + esc(m.name) + '">🖼 ' + T('Token') + '</button>' : '') +
       '<button data-act="monCopy" data-id="' + m.id + '">' + T('Copy to my monsters & edit') + '</button></p>';
   }
   function newMonsterForm(mons) {

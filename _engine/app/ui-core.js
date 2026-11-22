@@ -435,11 +435,10 @@ window.UI = (function () {
   // ======================================================================
   //  SIDE PANEL — dice + log
   // ======================================================================
-  U.renderSide = function () {
-    const el = document.getElementById('side'); if (!el) return;
+  // the dice roller and the roll log: in the side column on a wide screen; on the hero sheet they are also tabs (🎲 / 📜)
+  U.diceHtml = function () {
     const m = S.mode;
-    el.innerHTML =
-      '<div class="panel dice">' +
+    return '<div class="panel dice">' +
       '<div class="modes"><button class="' + (m === 'normal' ? 'on' : '') + '" data-act="mode" data-v="normal">' + T('Normal') + '</button>' +
       '<button class="' + (m === 'adv' ? 'on adv' : '') + '" data-act="mode" data-v="adv">' + T('Advantage') + '</button>' +
       '<button class="' + (m === 'dis' ? 'on dis' : '') + '" data-act="mode" data-v="dis">' + T('Disadvantage') + '</button></div>' +
@@ -447,9 +446,16 @@ window.UI = (function () {
       '<div class="dbtns">' + [4, 6, 8, 10, 12, 20, 100].map(n => '<button data-act="die" data-n="' + n + '">d' + n + '</button>').join('') + '</div>' +
       '<form class="expr" data-form="expr"><input name="e" placeholder="' + esc(T('e.g. 2d6+3')) + '" autocomplete="off"><button>' + T('Roll') + '</button></form>' +
       '<label class="animtoggle"><input type="checkbox" data-on="anim"' + (U.animOn() ? ' checked' : '') + '> ' + T('🎲 Dice animation') + '</label> ' + U.ib('diceanim') +
-      '</div>' +
-      '<div class="panel log"><div class="lh"><b>' + T('Roll log') + '</b><button class="link" data-act="clearLog">' + T('clear') + '</button></div>' +
+      '</div>';
+  };
+  U.logHtml = function () {
+    return '<div class="panel log"><div class="lh"><b>' + T('Roll log') + '</b><button class="link" data-act="clearLog">' + T('clear') + '</button></div>' +
       (S.log.length ? S.log.map(x => '<div class="le">' + x.html + '</div>').join('') : '<div class="empty">' + T('Rolls appear here.') + '</div>') + '</div>';
+  };
+  U.renderSide = function () {
+    const el = document.getElementById('side'); if (el) el.innerHTML = U.diceHtml() + U.logHtml();
+    const sl = document.getElementById('sheetLog'); if (sl) sl.innerHTML = U.logHtml(); // the 📜 tab of the hero sheet
+    const sd = document.getElementById('sheetDice'); if (sd && !sd.contains(document.activeElement)) sd.innerHTML = U.diceHtml();
   };
 
   // ======================================================================
@@ -465,6 +471,7 @@ window.UI = (function () {
     const gt = document.getElementById('gameTag');
     if (gt) gt.innerHTML = U.game ? '🎲 ' + esc(U.game.name) : '🎲 ' + T('No game open');
     document.querySelectorAll('.need-game').forEach(b => { b.disabled = U.DM && !U.game; });
+    document.body.classList.toggle('on-sheet', v === 'sheet'); // narrow screen: the sheet has its own 🎲 / 📜 tabs
     U.renderSide(); if (v !== 'games') { store.set('view', S.view); store.set('charId', S.charId); }
   };
   U.go = (view, id) => { S.view = view; if (id) S.charId = id; U.render(); window.scrollTo(0, 0); };
