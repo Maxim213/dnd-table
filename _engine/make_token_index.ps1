@@ -2,7 +2,8 @@
 # Name a picture like the creature or hero: "Skeleton.png", "Seraphina.webp" (Cyrillic names work too).
 # Run after adding pictures, then publish (commit + push) the GAME folder.
 $dir = Join-Path $PSScriptRoot '..\assets\tokens\custom'
-$files = Get-ChildItem -Path $dir -File | Where-Object { $_.Extension -match '^\.(png|jpe?g|webp|gif)$' } | Sort-Object Name | ForEach-Object { $_.Name }
-$json = '[' + (($files | ForEach-Object { '"' + ($_ -replace '\', '\' -replace '"', '\"') + '"' }) -join ', ') + ']'
+$files = @(Get-ChildItem -Path $dir -File | Where-Object { $_.Extension -match '^\.(png|jpe?g|webp|gif)$' } | Sort-Object Name | ForEach-Object { $_.Name })
+$json = ConvertTo-Json -InputObject $files -Compress
+if (-not $json -or $json -eq 'null') { $json = '[]' }
 [IO.File]::WriteAllText((Join-Path $dir 'index.json'), $json, (New-Object Text.UTF8Encoding $false))
-Write-Output ("index.json: " + @($files).Count + " pictures")
+Write-Output ("index.json: " + $files.Count + " pictures")
