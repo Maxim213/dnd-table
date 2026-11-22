@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>D&amp;D Table — turn order</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; font: 12px/1.2 'Segoe UI', Arial, sans-serif; color: #ece3d3; }
+  .bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(21, 17, 13, 0.88); border: 1px solid #4a3b28; border-radius: 14px; height: 84px; box-sizing: border-box; }
+  .rnd { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 46px; color: #f2c96b; font-family: Georgia, serif; }
+  .rnd b { font-size: 22px; line-height: 1; }
+  .rnd small { font-size: 10px; color: #a8997f; }
+  .list { display: flex; gap: 6px; overflow-x: auto; flex: 1; scrollbar-width: thin; }
+  .c { position: relative; width: 62px; flex: none; text-align: center; opacity: 0.72; }
+  .c.now { opacity: 1; }
+  .c.now .pic { box-shadow: 0 0 0 3px #f2c96b, 0 0 14px #f2c96b; }
+  .c.next { opacity: 0.9; }
+  .pic { width: 48px; height: 48px; margin: 0 auto; border-radius: 50%; background: #2f2921 center / cover no-repeat; border: 2px solid #5a4a33; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .c.mon .pic { border-color: #8a3b33; }
+  .c.pc .pic { border-color: #c79a3e; }
+  .n { margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+  .hp { height: 4px; margin: 2px 6px 0; background: #3a2d22; border-radius: 2px; overflow: hidden; }
+  .hp i { display: block; height: 100%; background: #5cb85c; }
+  .st { position: absolute; top: 0; right: 4px; font-size: 11px; }
+  .x { background: none; border: none; color: #a8997f; cursor: pointer; font-size: 14px; align-self: flex-start; }
+  .down { filter: grayscale(1); opacity: 0.45; }
+</style>
+</head>
+<body>
+<div class="bar"><div class="rnd"><small>раунд</small><b id="r">–</b></div><div class="list" id="l"></div><button class="x" id="x" title="Скрыть до следующего боя">✕</button></div>
+<script type="module">
+  // The turn order above the map, for everybody. Reads the fight summary the sync keeps in this browser:
+  // the DM: dndt.obrdm (with monster HP), a player: dndp.obrstate. Pictures = the linked tokens on the scene.
+  const SDK = 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
+  const ST = { ok: '🟢', hurt: '🟡', bloodied: '🟠', dying: '🔴', down: '💀' };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const st = () => { for (const k of ['dndt.obrdm', 'dndp.obrstate']) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v && v.list) return v; } catch (e) {} } return null; };
+  let pics = {};
+  function draw() {
+    const s = st(); const L = (s && s.list) || [];
+    document.getElementById('r').textContent = s && s.on ? s.round || 1 : '–';
+    const n = L.length; const order = []; for (let k = 0; k < n; k++) order.push((Math.max(0, s.turn) + k) % n); // the one who acts first, then who comes next
+    document.getElementById('l').innerHTML = order.map((i, k) => {
+      const e = L[i]; const pic = (e.cid && pics['pc:' + e.cid]) || pics['mon:' + e.id] || pics['n:' + e.n] || '';
+      const down = e.k === 'pc' ? e.hp <= 0 && e.mx > 0 : e.st === 'down';
+      const hp = e.mx ? '<div class="hp"><i style="width:' + Math.max(0, Math.min(100, Math.round(e.hp / e.mx * 100))) + '%"></i></div>' : '';
+      return '<div class="c ' + (e.k === 'pc' ? 'pc' : 'mon') + (k === 0 ? ' now' : k === 1 ? ' next' : '') + (down ? ' down' : '') + '" title="' + esc(e.n) + '">' +
+        '<div class="pic"' + (pic ? ' style="background-image:url(\'' + esc(pic) + '\')"' : '') + '>' + (pic ? '' : esc(Array.from(String(e.n || '?'))[0])) + '</div>' +
+        (e.k === 'mon' && e.st ? '<span class="st">' + (ST[e.st] || '') + '</span>' : '') + '<div class="n">' + esc(e.n) + '</div>' + hp + '</div>';
+    }).join('');
+  }
+  window.addEventListener('storage', e => { if (/obrdm|obrstate/.test(e.key || '')) draw(); });
+  draw();
+  try {
+    const OBR = (await import(SDK)).default;
+    OBR.onReady(async () => {
+      const read = async () => {
+        try {
+          const items = await OBR.scene.items.getItems(it => it.layer === 'CHARACTER' && it.type === 'IMAGE');
+          const p = {}; items.forEach(it => { const lk = it.metadata && it.metadata['dndtable/link']; const u = it.image && it.image.url; if (!u) return; if (lk && lk.k === 'pc') p['pc:' + lk.cid] = u; else if (lk && lk.k === 'mon') { p['mon:' + lk.eid] = u; p['n:' + lk.n] = u; } else if (it.name) p['n:' + it.name] = p['n:' + it.name] || u; });
+          pics = p; draw();
+        } catch (e) {}
+      };
+      read(); OBR.scene.items.onChange(() => read());
+      document.getElementById('x').onclick = () => { try { localStorage.setItem('dnd.initbarOff', '1'); } catch (e) {} OBR.popover.close('dndtable/initbar'); };
+    });
+  } catch (e) { console.warn(e); }
+</script>
+</body>
+</html>

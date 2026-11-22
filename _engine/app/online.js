@@ -27,6 +27,7 @@
     if (ON.owlbear && U.DM) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="hideRolls" title="' + esc(hideRolls() ? T('Your rolls are hidden from the players — click to show them') : T('Players see your rolls — click to hide them')) + '">' + (hideRolls() ? '🙈' : '👁') + '</button>');
     if (ON.owlbear && U.DM) { const st = !U.strict || U.strict(); el.insertAdjacentHTML('beforeend', '<button class="tb' + (st ? '' : ' freerules') + '" data-act="strictRules" title="' + esc(st ? T('Strict rules: the app refuses what breaks the rules (turns, distance, movement, slots). Click for free rules.') : T('Free rules: players may do anything, the log only says what broke the rules. Click for strict rules.')) + '">' + (st ? '⚖️' : '🕊') + '</button>'); }
     if (ON.owlbear && U.DM) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="visionPop" title="' + esc(T('Vision on this scene')) + '">🔦</button><button class="tb" data-act="fxPop" title="' + esc(T('Atmosphere effects')) + '">✨</button>');
+    if (ON.owlbear) { const hoN = (U.raw.get('obrHandouts', []) || []).length; if (U.DM) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="handoutPop" title="' + esc(T('Show to everybody')) + '">📜</button><button class="tb" data-act="checkPop" title="' + esc(T('A check for the party')) + '">🎯</button>'); else if (hoN) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="hoOpen" title="' + esc(T('Handouts from the DM')) + '">📜' + hoN + '</button>'); }
     if (ON.owlbear) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="tableMusic" title="' + esc(T('Table music')) + '">🎼</button>');
     if (ON.owlbear) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="panelSize" title="' + esc(s === 'wide' ? T('Make the panel narrow (see the map)') : T('Make the panel wide')) + '">' + (s === 'wide' ? '⇥' : '⇤') + '</button>');
     const tag = document.getElementById('modeTag');
@@ -59,6 +60,48 @@
   U.ACT.visMode = async ds => { try { const md = (await OBR.scene.getMetadata()) || {}; const v = Object.assign({ epoch: 0 }, md[VIS] || {}, { mode: ds.v }); await OBR.scene.setMetadata({ [VIS]: v }); visionPop(); } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); } };
   U.ACT.visReset = async () => { try { const md = (await OBR.scene.getMetadata()) || {}; const v = Object.assign({ mode: 'off' }, md[VIS] || {}); v.epoch = (v.epoch || 0) + 1; await OBR.scene.setMetadata({ [VIS]: v }); U.toast('🧹 ' + T('The players forgot the map: only what they see now is open.')); } catch (e) {} };
   U.ACT.visTorch = ds => { (S.chars || []).filter(c => c.party !== false).forEach(c => { if (ds.v) c.light = ds.v; else delete c.light; }); U.saveChars(); visionPop(); };
+  // ---------- 📜 handouts: the DM shows a picture or a letter to everybody (obr-bg.js receives, handout.html shows) ----------
+  let hoImg = '';
+  function handoutPop() {
+    const pop = document.getElementById('pop'); if (!pop || !window.OBR) return;
+    pop.innerHTML = '<div class="popcard settings" role="dialog"><div class="ph"><h2>📜 ' + T('Show to everybody') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
+      '<p class="hint">' + T('A picture (a map, a letter, an NPC portrait) and / or a text. It pops up on every screen and stays in the players\' handouts.') + '</p>' +
+      '<p><label class="blk">' + T('Title') + '<input id="hoTitle" placeholder="' + esc(T('e.g. Tobias\'s map')) + '"></label></p>' +
+      '<p><label class="blk">' + T('Picture') + ' <input type="file" id="hoFile" accept="image/*" data-on="hoFile"></label></p>' +
+      (hoImg ? '<p><img src="' + hoImg + '" style="max-width:100%;max-height:220px;border-radius:6px"></p>' : '') +
+      '<p><label class="blk">' + T('Text (a letter, a note)') + '<textarea id="hoText" class="tall"></textarea></label></p>' +
+      '<div class="btnrow"><button class="primary" data-act="hoSend">📜 ' + T('Show to everybody') + '</button><button data-act="hoOpen">📂 ' + T('Earlier handouts') + '</button></div></div>';
+    pop.classList.add('show');
+  }
+  U.ON.hoFile = el => {
+    const f = el.files && el.files[0]; if (!f) return;
+    const img = new Image(); img.onload = () => {
+      const k = Math.min(1, 1100 / Math.max(img.width, img.height)); const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height); hoImg = cv.toDataURL('image/jpeg', 0.8);
+      const t = document.getElementById('hoTitle'), x = document.getElementById('hoText'); const keep = [t && t.value, x && x.value]; handoutPop();
+      if (keep[0]) document.getElementById('hoTitle').value = keep[0]; if (keep[1]) document.getElementById('hoText').value = keep[1];
+      URL.revokeObjectURL(img.src);
+    }; img.src = URL.createObjectURL(f);
+  };
+  U.ACT.hoSend = async () => {
+    const title = ((document.getElementById('hoTitle') || {}).value || '').trim(), text = ((document.getElementById('hoText') || {}).value || '').trim();
+    if (!hoImg && !text) { U.toast(T('Add a picture or a text first.')); return; }
+    const id = E.uid(), parts = []; for (let i = 0; i < hoImg.length; i += 12000) parts.push(hoImg.slice(i, i + 12000)); if (!parts.length) parts.push('');
+    const from = T('DM');
+    U.toast('📜 ' + T('Sending…'));
+    try {
+      for (let k = 0; k < parts.length; k++) { await OBR.broadcast.sendMessage('dndtable/v1', Object.assign({ type: 'hoPart', id, k, n: parts.length, data: parts[k] }, k === 0 ? { title, text: text.slice(0, 4000), from, t: Date.now() } : {})); await new Promise(r => setTimeout(r, 120)); }
+      const L = U.raw.get('obrHandouts', []).concat([{ id, img: hoImg, title, text, from, t: Date.now() }]).slice(-6); U.raw.set('obrHandouts', L);
+      U.ACT.hoOpen();
+      hoImg = ''; const pp = document.getElementById('pop'); if (pp) pp.classList.remove('show'); U.toast('✅ ' + T('Shown to everybody.'));
+    } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); }
+  };
+  U.ACT.hoOpen = async () => { // the handouts window (players: the 📜 button; the DM: from the popup)
+
+    try { const w = await OBR.viewport.getWidth(), h = await OBR.viewport.getHeight(); await OBR.popover.open({ id: 'dndtable/handout', url: new URL('handout.html', document.baseURI).href, width: 760, height: 620, anchorReference: 'POSITION', anchorPosition: { left: Math.round(w / 2), top: Math.round(h / 2) }, anchorOrigin: { horizontal: 'CENTER', vertical: 'CENTER' }, transformOrigin: { horizontal: 'CENTER', vertical: 'CENTER' } }); } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); }
+  };
+  U.ACT.handoutPop = () => handoutPop();
+
   // ---------- ✨ the DM: atmosphere effects over the map (obr-fx.js draws them for everybody) ----------
   const FXK = 'dndtable/fx';
   const FXS = [['fog', '🌫', 'Fog'], ['ash', '🌋', 'Falling ash'], ['drip', '💧', 'Dripping water'], ['sparks', '🔥', 'Sparks and embers'], ['gloom', '🌑', 'Gloom at the edges'], ['rain', '🌧', 'Rain (outdoors)'], ['snow', '❄️', 'Snow (outdoors)']];
@@ -172,6 +215,7 @@
     clearTimeout(stT);
     stT = setTimeout(() => {
       const st = summary(); const s = JSON.stringify(st); if (s !== lastSt) { lastSt = s; U.raw.set('obrstate', st); local('obrstate'); }
+      if (U.autoMusic) U.autoMusic(!!(st && st.on)); // ⚔️ fight music by itself
       const pv = summary(true); const p = JSON.stringify(pv); if (p !== lastPriv) { lastPriv = p; U.raw.set('obrdm', pv); if (U.obrTurnRing) U.obrTurnRing(pv); }
     }, 250);
   }
@@ -531,8 +575,48 @@
   };
   function takeAnswers() {
     const A = U.raw.get('obrAns', []); if (!A.length) return; U.raw.set('obrAns', []);
-    A.forEach(m => { const p = pend[m.id]; if (!p) return; if (m.type === 'saveRes') p.finish(Math.max(1, Math.min(20, Number(m.nat) || 1)), 'player'); else if (m.type === 'shieldRes') p.finish(!!m.yes, 'player'); });
+    A.forEach(m => { const p = pend[m.id]; if (!p) return; if (m.type === 'saveRes' || m.type === 'checkRes') p.finish(Math.max(1, Math.min(20, Number(m.nat) || 1)), 'player'); else if (m.type === 'shieldRes') p.finish(!!m.yes, 'player'); });
   }
+
+  // ---------- 🎯 checks on the DM's request: «Everybody: Perception, DC 13» — the players roll, the DM's app adds the bonus ----------
+  const CHK = () => [['Perception'], ['Investigation'], ['Insight'], ['Stealth'], ['Athletics'], ['Acrobatics'], ['Persuasion'], ['Deception'], ['Intimidation'], ['Survival'], ['Arcana'], ['History'], ['Religion'], ['Nature'], ['Medicine'], ['Sleight of Hand'], ['Animal Handling'], ['Performance']]
+    .map(s => ['skill:' + s[0], D.t ? D.t(s[0]) : s[0]]).concat(D.ABIL.map(a => ['abil:' + a, T('{0} check', D.ABIL_NAME[a] || a)]), D.ABIL.map(a => ['save:' + a, T('{0} save', D.ABIL_NAME[a] || a)]));
+  const bonusOf = (c, key) => { const d = E.compute(c); const [k, v] = key.split(':'); return k === 'skill' ? (d.skills[v] || { val: 0 }).val : k === 'abil' ? d.mod[v] : (d.saves[v] || { val: 0 }).val; };
+  let chkRes = [];
+  function checkPop() {
+    const pop = document.getElementById('pop'); if (!pop) return;
+    const heroes = (S.chars || []).filter(c => c.party !== false);
+    pop.innerHTML = '<div class="popcard settings" role="dialog"><div class="ph"><h2>🎯 ' + T('A check for the party') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
+      '<p><label class="blk">' + T('What') + '<select id="chkWhat">' + CHK().map(o => '<option value="' + o[0] + '">' + esc(o[1]) + '</option>').join('') + '</select></label></p>' +
+      '<p><label class="inl">' + T('DC') + ' <input type="number" id="chkDc" class="tiny" placeholder="—"></label> <small class="dim">' + T('empty = you decide after the rolls') + '</small></p>' +
+      '<p>' + heroes.map(c => '<label class="inl"><input type="checkbox" class="chkWho" value="' + esc(c.id) + '" checked> ' + esc(c.name) + (c.obr ? '' : ' <small class="dim">(' + T('you roll') + ')</small>') + '</label>').join(' ') + '</p>' +
+      '<div class="btnrow"><button class="primary" data-act="chkAsk">🎲 ' + T('Players roll') + '</button><button data-act="chkSecret">🙈 ' + T('Roll secretly for all') + '</button></div>' +
+      (chkRes.length ? '<h3>' + T('Results') + '</h3><ul class="condl">' + chkRes.map(r => '<li><b>' + esc(r.n) + '</b>: 🎲 ' + r.nat + ' ' + U.sign(r.b) + ' = <b class="big">' + r.tot + '</b>' + (r.dc ? ' ' + (r.tot >= r.dc ? '<b class="ok">✓</b>' : '<b class="fail">✗</b>') : '') + ' <small class="dim">' + esc(r.by) + '</small></li>').join('') + '</ul>' : '') + '</div>';
+    pop.classList.add('show');
+  }
+  function chkStart(secret) {
+    const key = (document.getElementById('chkWhat') || {}).value; const dc = Number((document.getElementById('chkDc') || {}).value) || 0;
+    const ids = [...document.querySelectorAll('.chkWho:checked')].map(x => x.value); const label = (CHK().find(o => o[0] === key) || [key, key])[1];
+    if (!key || !ids.length) return; chkRes = [];
+    ids.forEach(cid => {
+      const c = U.byId(cid); if (!c) return; const id = E.uid();
+      const finish = (nat, by) => {
+        if (pend[id]) { clearTimeout(pend[id].timer); delete pend[id]; }
+        let b = 0; try { b = bonusOf(c, key); } catch (e) {}
+        const n = nat == null ? 1 + Math.floor(Math.random() * 20) : nat; const tot = n + b;
+        chkRes.push({ n: c.name, nat: n, b, tot, dc, by: by === 'player' ? T('rolled by the player') : secret ? T('secret') : T('rolled by the app') });
+        if (!secret) U.logAdd(c.name, ['🎯 ' + esc(label) + ': 🎲 ' + n + ' ' + U.sign(b) + ' = <b class="big">' + tot + '</b>' + (dc ? ' ' + (tot >= dc ? '≥ ' + dc + ' <b class="ok">' + T('SUCCESS') + '</b>' : '&lt; ' + dc + ' <b class="fail">' + T('FAIL') + '</b>') : '')]);
+        checkPop();
+      };
+      if (!secret && c.obr && OBR) { pend[id] = { finish, timer: setTimeout(() => finish(null, 'auto'), 45000) }; sendTo(c.obr.pid, { type: 'checkReq', id, cid: c.id, hero: c.name, what: label, dc: dc || 0 }); }
+      else finish(null, 'app');
+    });
+    if (!secret) U.toast('🎯 ' + T('Asked: {0}', esc(label)));
+    checkPop();
+  }
+  U.ACT.checkPop = () => checkPop();
+  U.ACT.chkAsk = () => chkStart(false);
+  U.ACT.chkSecret = () => chkStart(true);
   // a monster the DM moves away from a hero → that hero's player is offered an opportunity attack (his reaction)
   async function offerOA(it, prev, cur) {
     const cb = S.combat; if (!U.DM || !cb || cb.turn < 0 || !U.strict()) return;
@@ -803,6 +887,10 @@
         Object.keys(TM.MOODS).map(k => '<button class="mood' + (st && st.on && st.kind === 'mood' && st.mood === k ? ' on' : '') + '" data-act="tmMood" data-v="' + k + '">' + esc(moodName(k)) + '</button>').join('') + '</div>' +
         '<p><input id="tmYt" placeholder="' + esc(T('YouTube link (music, ambience…)')) + '" value="' + esc(st && st.kind === 'yt' ? 'https://youtu.be/' + st.yt : '') + '"> <button data-act="tmYt">▶️ YouTube</button></p>' +
         '<p><button class="danger" data-act="tmStop">⏹ ' + T('Stop for everyone') + '</button></p>';
+      const bm = U.store.get('battleMusic', { kind: 'mood', mood: 'battle' }); const auto = U.store.get('autoMusic', true);
+      h += '<h4>⚔️ ' + T('Fight music') + '</h4><p><label class="inl"><input type="checkbox" data-on="autoMusic"' + (auto ? ' checked' : '') + '> ' + T('Switch by itself: a fight starts → fight music, the fight ends → back to the music before') + '</label></p>' +
+        '<p><select data-on="bmMood">' + Object.keys(TM.MOODS).map(k => '<option value="' + k + '"' + (bm.kind === 'mood' && bm.mood === k ? ' selected' : '') + '>' + esc(moodName(k)) + '</option>').join('') + '<option value="yt"' + (bm.kind === 'yt' ? ' selected' : '') + '>▶️ YouTube</option></select> ' +
+        '<input id="bmYt" placeholder="' + esc(T('YouTube link for fights')) + '" value="' + esc(bm.kind === 'yt' ? 'https://youtu.be/' + bm.yt : '') + '"> <button class="mini" data-act="bmSave">' + T('Save') + '</button></p>';
     }
     h += '<h4>🔊 ' + T('My volume') + '</h4><p><input type="range" min="0" max="100" value="' + Math.round(tvol() * 100) + '" data-in="tvol"> <span class="setv">' + Math.round(tvol() * 100) + '%</span> ' +
       '<label class="inl"><input type="checkbox" data-on="tmute"' + (tmute() ? ' checked' : '') + '> ' + T('Mute the table music for me') + '</label></p>' +
@@ -811,6 +899,25 @@
     pop.innerHTML = h; pop.classList.add('show');
   }
   const setMusic = st => { U.raw.set('obrmusic', st); local('obrmusic'); setTimeout(musicPop, 400); };
+  // ⚔️ fight music by itself: a fight starts → the fight music for everybody; it ends → the music that played before
+  U.ON.autoMusic = el => U.store.set('autoMusic', !!el.checked);
+  U.ON.bmMood = el => { if (el.value !== 'yt') U.store.set('battleMusic', { kind: 'mood', mood: el.value }); };
+  U.ACT.bmSave = async () => {
+    const sel = document.querySelector('[data-on="bmMood"]'); const TM = await loadTM();
+    if (sel && sel.value === 'yt') { const id = TM.ytIdOf((document.getElementById('bmYt') || {}).value); if (!id) { U.toast(T('That is not a YouTube link.')); return; } U.store.set('battleMusic', { kind: 'yt', yt: id }); }
+    else if (sel) U.store.set('battleMusic', { kind: 'mood', mood: sel.value });
+    U.toast('⚔️ ' + T('Saved.'));
+  };
+  let fightWas = null;
+  U.autoMusic = on => {
+    if (!U.DM || !U.game) return;
+    if (fightWas === null) { fightWas = on; return; } // the panel just opened: no switch
+    if (on === fightWas) return; fightWas = on;
+    if (!U.store.get('autoMusic', true)) return;
+    const quiet = st => { U.raw.set('obrmusic', st); local('obrmusic'); };
+    if (on) { U.store.set('musicBefore', U.raw.get('obrmusic', null)); const bm = U.store.get('battleMusic', { kind: 'mood', mood: 'battle' }); quiet(Object.assign({ on: true, t: Date.now() }, bm)); U.toast('⚔️ ' + T('Fight music is on.')); }
+    else { const prev = U.store.get('musicBefore', null); quiet(prev && prev.on ? Object.assign({}, prev, { t: Date.now() }) : { on: false, t: Date.now() }); }
+  };
   U.ACT.tableMusic = () => musicPop();
   U.ACT.tmMood = ds => setMusic({ on: true, kind: 'mood', mood: ds.v, t: Date.now() });
   U.ACT.tmYt = async () => { const TM = await loadTM(); const id = TM.ytIdOf((document.getElementById('tmYt') || {}).value); if (!id) { U.toast(T('That is not a YouTube link.')); return; } setMusic({ on: true, kind: 'yt', yt: id, t: Date.now() }); };
@@ -855,6 +962,7 @@
   window.addEventListener('storage', e => {
     const k = e.key || ''; if (!k.startsWith(P)) return; const rest = k.slice(P.length);
     if (U.PLAYER && rest === 'obrshops') takeShops();
+    if (rest === 'obrHandouts') U.renderTop(); // the 📜 counter
     if (U.DM && rest === 'obrShopBuy') takeBuys();
   });
 

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>D&amp;D Table — handout</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #15110d; color: #ece3d3; font: 15px/1.5 Georgia, 'Times New Roman', serif; }
+  .wrap { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: 12px 14px; }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .top h1 { flex: 1; margin: 0; font-size: 20px; color: #f2c96b; font-weight: normal; }
+  button { background: #2f2921; color: #ece3d3; border: 1px solid #43392d; border-radius: 7px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+  button:hover { border-color: #d9a441; }
+  .body { flex: 1; overflow: auto; margin-top: 8px; }
+  .body img { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; border-radius: 6px; box-shadow: 0 6px 24px #000a; cursor: zoom-in; }
+  .body img.big { max-height: none; cursor: zoom-out; }
+  .txt { white-space: pre-wrap; margin-top: 10px; padding: 12px 14px; background: #241c14; border: 1px solid #4a3b28; border-radius: 8px; }
+  .from { color: #a8997f; font-size: 12px; }
+  .nav { display: flex; gap: 6px; align-items: center; color: #a8997f; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><h1 id="t">📜</h1><span class="nav"><button id="prev">◀</button><span id="n"></span><button id="next">▶</button></span><button id="x" title="Закрыть">✕</button></div>
+  <div class="from" id="f"></div>
+  <div class="body" id="b"><p>⏳</p></div>
+</div>
+<script type="module">
+  // Shows the handouts the DM sent (pictures, letters). They are kept in this browser: dndp.obrHandouts / dndt.obrHandouts.
+  const SDK = 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const list = () => { for (const P of ['dndp.', 'dndt.']) { try { const v = JSON.parse(localStorage.getItem(P + 'obrHandouts') || 'null'); if (Array.isArray(v) && v.length) return v; } catch (e) {} } return []; };
+  let i = -1;
+  function show() {
+    const L = list(); if (!L.length) { document.getElementById('b').innerHTML = '<p>Пока ничего не показывали.</p>'; return; }
+    if (i < 0 || i >= L.length) i = L.length - 1;
+    const h = L[i];
+    document.getElementById('t').textContent = '📜 ' + (h.title || 'Раздатка');
+    document.getElementById('f').textContent = (h.from ? h.from + ' · ' : '') + new Date(h.t || Date.now()).toLocaleTimeString();
+    document.getElementById('n').textContent = (i + 1) + ' / ' + L.length;
+    document.getElementById('b').innerHTML = (h.img ? '<img id="im" src="' + h.img + '" alt="">' : '') + (h.text ? '<div class="txt">' + esc(h.text) + '</div>' : '');
+    const im = document.getElementById('im'); if (im) im.onclick = () => im.classList.toggle('big');
+  }
+  document.getElementById('prev').onclick = () => { i = Math.max(0, i - 1); show(); };
+  document.getElementById('next').onclick = () => { i = Math.min(list().length - 1, i + 1); show(); };
+  window.addEventListener('storage', e => { if (/obrHandouts$/.test(e.key || '')) { i = -1; show(); } });
+  show();
+  try {
+    const OBR = (await import(SDK)).default;
+    OBR.onReady(() => { document.getElementById('x').onclick = () => OBR.popover.close('dndtable/handout'); });
+  } catch (e) { document.getElementById('x').onclick = () => window.close(); }
+</script>
+</body>
+</html>

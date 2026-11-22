@@ -367,6 +367,11 @@ export function startCard(OBR, opts) {
           '<p class="tc-hint">' + tr('Roll d20', 'Брось d20') + ' ' + sgn(b) + ' — ' + tr('you need', 'нужно') + ' <b>' + m.dc + '</b> ' + tr('or more', 'или больше') + '.' + (m.mode === 'adv' ? ' ⬆ ' + tr('Advantage', 'С преимуществом') : m.mode === 'dis' ? ' ⬇ ' + tr('Disadvantage', 'С помехой') : '') + '</p>' +
           '<div class="tc-row"><button class="primary big" data-ans="save">🎲 ' + tr('Roll', 'Бросить') + ' ' + abn(m.abil) + ' ' + sgn(b) + '</button></div>';
       }
+      if (m.type === 'checkReq') {
+        return head('🎯', tr('The DM asks for a roll', 'Мастер просит бросок'), esc(m.hero || '')) +
+          '<p class="tc-hint"><b>' + esc(m.what || '') + '</b>' + (m.dc ? ' · ' + tr('you need', 'нужно') + ' <b>' + m.dc + '</b>' : '') + '. ' + tr('Roll the d20 — the DM\'s app adds your bonus.', 'Брось d20 — приложение мастера добавит твой бонус.') + '</p>' +
+          '<div class="tc-row"><button class="primary big" data-ans="check">🎲 ' + tr('Roll', 'Бросить') + '</button></div>';
+      }
       if (m.type === 'shieldReq') {
         return head('🛡', tr('You are hit!', 'По тебе попали!'), esc(m.by || '') + ' — ' + esc(m.what || '')) +
           '<p class="tc-hint">' + tr('Attack', 'Атака') + ' <b>' + m.total + '</b> ' + tr('vs your AC', 'против твоего КД') + ' ' + m.ac + '. ' + tr('Shield gives +5 AC until your next turn → this attack misses. Costs your reaction and a level 1 slot.', 'Щит даёт +5 КД до твоего следующего хода → эта атака промахнётся. Тратит реакцию и ячейку 1 уровня.') + '</p>' +
@@ -419,6 +424,9 @@ export function startCard(OBR, opts) {
           const nat = m.mode === 'adv' ? Math.max(d1, d2) : m.mode === 'dis' ? Math.min(d1, d2) : d1;
           const tot = nat + bn;
           answer({ type: 'saveRes', nat }, '🎲 ' + (m.mode === 'adv' || m.mode === 'dis' ? d1 + ', ' + d2 + ' → ' : '') + nat + ' ' + sgn(bn) + ' = <b>' + tot + '</b> ' + (tot >= m.dc ? '≥ ' + m.dc + ' — ' + tr('looks like a success!', 'похоже, устоял!') : '&lt; ' + m.dc + ' — ' + tr('looks like a fail…', 'похоже, провал…')) + '<br><small>' + tr('The DM\'s app adds the rest (Bless…) and writes the result to the log.', 'Приложение мастера добавит остальное (Благословение…) и запишет итог в журнал.') + '</small>');
+        } else if (b.dataset.ans === 'check') {
+          const nat = 1 + Math.floor(Math.random() * 20);
+          answer({ type: 'checkRes', nat }, '🎲 ' + nat + (nat === 20 ? ' — ' + tr('a natural 20!', 'натуральная 20!') : nat === 1 ? ' — ' + tr('ouch, a 1…', 'ой, единица…') : '') + '<br><small>' + tr('The DM sees the total in his app.', 'Итог с бонусом мастер видит у себя.') + '</small>');
         } else if (b.dataset.ans === 'shield-yes') answer({ type: 'shieldRes', yes: true }, '🛡 ' + tr('Shield!', 'Щит!'));
         else if (b.dataset.ans === 'shield-no') answer({ type: 'shieldRes', yes: false }, tr('No Shield.', 'Без Щита.'));
         else if (b.dataset.ans === 'oa-no') answer(null, tr('You let it go.', 'Ты его отпустил.'));

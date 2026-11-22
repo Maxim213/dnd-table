@@ -45,8 +45,17 @@
   const SDK = 'https://cdn.jsdelivr.net/npm/@owlbear-rodeo/sdk@3.1.0/+esm';
   // watchdog: if the window is still empty after 6 s, say so (with the stage it stopped at) and offer a retry
   window.__stage = 'sdk';
+  const note = st => { try { localStorage.setItem('dnd.popStage', JSON.stringify({ st, t: Date.now(), pop: !!q.get('pop') })); } catch (e) {} }; // the panel can show where windows get stuck
+  // still ⏳ after 5 s: reload this window ONCE by itself (Owlbear sometimes never says "ready" to a fresh popover)
   setTimeout(() => {
     const c = document.getElementById('card'); if (!c || c.textContent.trim() !== '⏳') return;
+    note(window.__stage);
+    let tries = 0; try { tries = Number(sessionStorage.getItem('dnd.popRetry') || 0); } catch (e) {}
+    if (tries < 1) { try { sessionStorage.setItem('dnd.popRetry', String(tries + 1)); } catch (e) {} location.reload(); }
+  }, 5000);
+  setTimeout(() => {
+    const c = document.getElementById('card'); if (!c || c.textContent.trim() !== '⏳') { try { sessionStorage.removeItem('dnd.popRetry'); } catch (e) {} return; }
+    note(window.__stage);
     c.innerHTML = '<p class="tc-msg">⚠️ Окно не загрузилось (этап: ' + window.__stage + '). Ходи через панель D&amp;D Table — вкладка «Бой».</p><p><button onclick="location.reload()">🔄 Ещё раз</button></p>';
   }, 6000);
   const imp = async u => { for (let i = 0; i < 4; i++) { try { return await Promise.race([import(i ? u + (u.indexOf('?') < 0 ? '?' : '&') + 'r=' + Date.now() : u), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]); } catch (e) { if (i === 3) throw e; await new Promise(r => setTimeout(r, 1500)); } } }; // retry a slow / failed load

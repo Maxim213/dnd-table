@@ -138,11 +138,24 @@ export function startBackground(OBR, by) {
       try { await OBR.room.setMetadata({ [ROOM]: st || null }); lastState = s; } catch (e) { console.warn('room metadata', e); } // failed (offline) → the self-check tries again
     };
     let turnKey = get('obrTurnKey', '');
+    // the turn order above the map (initbar.html): open while a fight is on, closed after; ✕ hides it until the next fight
+    let barN = -1;
+    async function initBar(st) {
+      const on = !!(st && st.on && st.list && st.list.length);
+      if (!on) { try { localStorage.removeItem('dnd.initbarOff'); } catch (e) {} if (barN >= 0) { barN = -1; try { await OBR.popover.close('dndtable/initbar'); } catch (e) {} } return; }
+      let off = false; try { off = localStorage.getItem('dnd.initbarOff') === '1'; } catch (e) {}
+      if (off) return;
+      const n = Math.min(st.list.length, 14); if (n === barN) return; barN = n;
+      let w = 1000; try { w = await OBR.viewport.getWidth(); } catch (e) {}
+      const width = Math.max(220, Math.min(w - 80, 90 + n * 68 + 30));
+      try { await OBR.popover.close('dndtable/initbar'); } catch (e) {}
+      try { await OBR.popover.open({ id: 'dndtable/initbar', url: new URL('initbar.html', location.href).href, width, height: 92, anchorReference: 'POSITION', anchorPosition: { left: Math.round(w / 2), top: 10 }, anchorOrigin: { horizontal: 'CENTER', vertical: 'TOP' }, transformOrigin: { horizontal: 'CENTER', vertical: 'TOP' }, disableClickAway: true, hidePaper: true }); } catch (e) { console.warn('initbar', e); barN = -1; }
+    }
     let lastTaken = '';
     const takeState = (st, quiet) => {
       if (DM) return;
       const k = JSON.stringify(st || null); if (quiet && k === lastTaken) return; lastTaken = k; // the self-check found nothing new
-      set('obrstate', st || null); drawReachSoon(); if (visionApi) visionApi.soon();
+      set('obrstate', st || null); initBar(st); drawReachSoon(); if (visionApi) visionApi.soon();
       const mine = new Set(get('chars', []).map(c => c.id));
       const a = st && st.on && st.list && st.list[st.turn];
       const key = st && st.on ? st.round + ':' + st.turn : '';
@@ -185,6 +198,7 @@ export function startBackground(OBR, by) {
       const m = (ev && ev.data) || {};
       if (m.type === 'log') takeLog(m);
       else if (m.type === 'heroSet') takeHero(m);
+      else if (m.type === 'hoPart') takeHandout(m);
       else if (m.type === 'shop' && !DM) takeShopPart(m);
       else if (m.type === 'shopIds' && !DM) takeShopIds(m);
       else if (m.type === 'shopReq' && DM) sendShops();
@@ -192,11 +206,11 @@ export function startBackground(OBR, by) {
       else if (m.type === 'act' && DM && m.req) takeAct(m.req);
       else if (m.type === 'note' && m.to === OBR.player.id && m.text) { try { OBR.notification.show(String(m.text).slice(0, 160), 'WARNING'); } catch (e) {} }
       // the DM's app waits for a player's answer (a save he rolls himself, Shield yes / no)
-      else if (DM && (m.type === 'saveRes' || m.type === 'shieldRes') && m.id) { const A = get('obrAns', []); A.push({ type: m.type, id: m.id, nat: m.nat, yes: m.yes }); set('obrAns', A.slice(-20)); }
+      else if (DM && (m.type === 'saveRes' || m.type === 'shieldRes' || m.type === 'checkRes') && m.id) { const A = get('obrAns', []); A.push({ type: m.type, id: m.id, nat: m.nat, yes: m.yes }); set('obrAns', A.slice(-20)); }
       // a player: "roll your save", "Shield?", "it runs away — hit it?" → the token window opens with the buttons
-      else if (!DM && m.to === OBR.player.id && (m.type === 'saveReq' || m.type === 'shieldReq' || m.type === 'oaOffer')) {
+      else if (!DM && m.to === OBR.player.id && (m.type === 'saveReq' || m.type === 'shieldReq' || m.type === 'oaOffer' || m.type === 'checkReq')) {
         set('obrAsk', Object.assign({ t: Date.now() }, m));
-        const txt = m.type === 'saveReq' ? '🎲 ' + tr('Saving throw!', 'Спасбросок!') + ' ' + (m.abil || '') + ' ' + tr('DC', 'СЛ') + ' ' + m.dc + ' — ' + (m.what || '')
+        const txt = m.type === 'checkReq' ? '🎯 ' + tr('The DM asks for a roll', 'Мастер просит бросок') + ': ' + (m.what || '') : m.type === 'saveReq' ? '🎲 ' + tr('Saving throw!', 'Спасбросок!') + ' ' + (m.abil || '') + ' ' + tr('DC', 'СЛ') + ' ' + m.dc + ' — ' + (m.what || '')
           : m.type === 'shieldReq' ? '🛡 ' + tr('You are hit — cast Shield?', 'По тебе попали — Щит?') : '⚔️ ' + (m.n || '') + ' ' + tr('runs away from you — hit it?', 'уходит от тебя — ударить?');
         say(txt, 'WARNING');
         (async () => { let c = { x: 600, y: 300 }; try { const w = await OBR.viewport.getWidth(); const h = await OBR.viewport.getHeight(); const s = await OBR.viewport.getScale(); const p = await OBR.viewport.getPosition(); c = { x: (w / 2 - 180 - p.x) / s, y: (h / 2 - p.y) / s }; } catch (e) {} openPop({ id: '', point: null, ask: m.id }, c); })();
@@ -205,13 +219,36 @@ export function startBackground(OBR, by) {
     if (DM) {
       OBR.party.onChange(players => mergeHeroes(players));
       OBR.party.getPlayers().then(mergeHeroes).catch(() => {});
-      publishState();
+      publishState(); initBar(get('obrdm', null));
       playMusic(get('obrmusic', null));
     } else {
       OBR.room.onMetadataChange(md => { takeState((md || {})[ROOM]); playMusic((md || {})[MUSIC]); });
       OBR.room.getMetadata().then(md => { takeState((md || {})[ROOM]); playMusic((md || {})[MUSIC]); }).catch(() => {});
       publishHeroes();
     }
+    // ---------- 📜 handouts: the DM shows a picture / a letter → it pops up for everybody (comes in parts, ≤16 KB a message) ----------
+    const hoBuf = {};
+    function storeHandout(h) {
+      let L = get('obrHandouts', []).filter(x => x.id !== h.id); L.push(h);
+      while (L.length && !set('obrHandouts', L.slice(-6))) L = L.slice(1); // full browser storage: forget the oldest
+    }
+    async function openHandout() {
+      let c = { left: 420, top: 300 }; try { const w = await OBR.viewport.getWidth(), h = await OBR.viewport.getHeight(); c = { left: Math.round(w / 2), top: Math.round(h / 2) }; } catch (e) {}
+      try { await OBR.popover.close('dndtable/handout'); } catch (e) {}
+      try { await OBR.popover.open({ id: 'dndtable/handout', url: new URL('handout.html', location.href).href, width: 760, height: 620, anchorReference: 'POSITION', anchorPosition: c, anchorOrigin: { horizontal: 'CENTER', vertical: 'CENTER' }, transformOrigin: { horizontal: 'CENTER', vertical: 'CENTER' } }); } catch (e) { console.warn('handout', e); }
+    }
+    function takeHandout(m) {
+      if (!m.id || !(m.n > 0)) return;
+      const b = hoBuf[m.id] = hoBuf[m.id] || { got: {}, meta: null };
+      b.got[m.k] = m.data || ''; if (m.k === 0) b.meta = { title: m.title || '', text: m.text || '', from: m.from || '', t: m.t || Date.now() };
+      if (Object.keys(b.got).length < m.n) return;
+      const img = Array.from({ length: m.n }, (_, k) => b.got[k] || '').join(''); delete hoBuf[m.id];
+      storeHandout(Object.assign({ id: m.id, img }, b.meta || { t: Date.now() }));
+      say('📜 ' + tr('The DM shows you', 'Мастер показывает') + ': ' + ((b.meta && b.meta.title) || tr('a handout', 'раздатку')), 'INFO');
+      openHandout();
+    }
+    window.__obrHandout = { open: openHandout, store: storeHandout };
+
     // ---------- 🛒 shops: DM (obrshops) → every player; a message is ≤16 KB, so a big shop goes in parts ----------
     let shopT = 0, shopLater = 0;
     async function sendShops() {
@@ -263,6 +300,7 @@ export function startBackground(OBR, by) {
       if (rest === gk('log')) sendNewLog();
       if (rest === gk('chars')) { if (DM) sendHeroChanges(); else publishHeroes(); }
       if (DM && rest === 'obrstate') publishState();
+      if (DM && rest === 'obrdm') initBar(get('obrdm', null)); // the turn order above the map
       if (DM && rest === 'obrmusic') publishMusic();
       if (DM && rest === 'obrshops') sendShops(); // the DM changed a shop
       if (rest === 'resyncReq' && by === 'bg') resync(); // the 🟢 button in the panel
