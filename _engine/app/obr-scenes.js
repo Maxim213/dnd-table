@@ -26,7 +26,9 @@
     [/\brat\b|крыс/i, 'rat'], [/\bbat\b|летуч/i, 'bat'], [/snake|змея|serpent/i, 'snake'], [/bear|медвед/i, 'bear'], [/ghost|призрак|specter|wraith|banshee/i, 'ghost'],
     [/vampire|вампир/i, 'vampire'], [/mage|маг|priest|жрец|cultist|культист|warlock|колдун/i, 'mage'], [/wolf|волк|worg|ворг/i, 'wolf']];
   function monToken(m) {
-    const own = m.token || customOf(m.name, m.en, String(m.id || '').replace(/^srd:/, '')); if (own) return own;
+    // also the short name: «Серафина, Палач Церкви» → «Серафина», «Атаманша «Чёрная Ирма»» → «Чёрная Ирма», «Гоблин [ПО 2]» → «Гоблин»
+    const nm = String(m.name || '').replace(/\s*\[[^\]]*\]/g, '').trim(); const quoted = (nm.match(/«([^»]+)»/) || [])[1];
+    const own = m.token || customOf(m.name, nm, nm.replace(/\s*[,(].*$/, ''), quoted, m.en, String(m.id || '').replace(/^srd:/, '')); if (own) return own;
     const s = (m.id || '') + ' ' + (m.name || '') + ' ' + (m.en || '');
     for (const [re, k] of SPECIAL) if (re.test(s)) return k;
     const ty = m.type || (D.MONSTERS[String(m.id || '').replace(/^srd:/, '')] || {}).type;
