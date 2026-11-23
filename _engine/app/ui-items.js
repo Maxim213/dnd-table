@@ -157,13 +157,17 @@
 
   // ---------- shops ----------
   // DM shops live in the game (S.shops). Players keep the shops they imported (also S.shops).
-  // The active scenario can bring its own shop (read only).
-  function scenarioShop() {
-    const p = SCN.active; if (!p || !p.shop || !p.shop.items) return null;
-    const items = p.shop.items.map(x => { const e = D.catalogById(x.id) || D.catalogById('s:' + p.id + ':' + x.id); return e ? Object.assign(U.entrySnap(e, x), { price: x.price != null ? x.price : priceOf(e, x.magicBonus), qty: x.qty == null ? -1 : x.qty }) : null; }).filter(Boolean);
-    return { id: 'scn:' + p.id, name: (Array.isArray(p.shop.ru) && U.LANG === 'ru' ? p.shop.ru[0] : p.shop.name) || p.title, desc: p.shop.desc || '', items, fromScenario: true };
+  // The active scenario can bring its own shops (read only): "shop" (one) and/or "shops" (a list).
+  function scenarioShops() {
+    const p = SCN.active; if (!p) return [];
+    const list = (p.shop && p.shop.items ? [p.shop] : []).concat(Array.isArray(p.shops) ? p.shops.filter(s => s && s.items) : []);
+    return list.map((sh, n) => {
+      const items = sh.items.map(x => { const e = D.catalogById(x.id) || D.catalogById('s:' + p.id + ':' + x.id); return e ? Object.assign(U.entrySnap(e, x), { price: x.price != null ? x.price : priceOf(e, x.magicBonus), qty: x.qty == null ? -1 : x.qty }) : null; }).filter(Boolean);
+      const ru = U.LANG === 'ru';
+      return { id: 'scn:' + p.id + (sh.id ? ':' + sh.id : n ? ':' + n : ''), name: (Array.isArray(sh.ru) && ru ? sh.ru[0] : sh.name) || p.title, desc: (Array.isArray(sh.ru) && ru && sh.ru[1]) || sh.desc || '', items, fromScenario: true };
+    });
   }
-  const allShops = () => { const sc = scenarioShop(); return (sc ? [sc] : []).concat(S.shops); };
+  const allShops = () => scenarioShops().concat(S.shops);
   const shopById = id => allShops().find(s => s.id === id);
   U.allShops = allShops; // online.js sends them to the players
 

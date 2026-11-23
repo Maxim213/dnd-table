@@ -245,7 +245,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       const out = isOut(x); const down = x.type === 'pc' && v.hp === 0;
       return '<div class="cb' + (i === cb.turn ? ' active' : '') + (out ? ' out' : '') + ' ' + x.type + '">' +
         '<input class="init" type="number" data-on="cbInit" data-id="' + x.id + '" value="' + (x.init == null ? '' : x.init) + '" title="' + esc(T('Initiative')) + '" placeholder="–">' +
-        '<div class="cbmain"><div class="cbn">' + (x.type === 'pc' ? '🧑 ' : '👹 ') + '<b>' + esc(v.name) + '</b> <span class="acb">' + T('AC') + ' ' + v.ac + '</span>' + (x.type === 'mon' && x.cr !== '' && x.cr != null ? ' <span class="crb" title="' + esc(crHint(x.cr)) + '">' + crShort(x.cr) + '</span>' : '') + (down ? ' <span class="fail">' + T('DOWN — death saves') + '</span>' : '') + (out ? ' <span class="fail">' + T('defeated') + '</span>' : '') + '</div>' +
+        '<div class="cbmain"><div class="cbn">' + (x.type === 'pc' ? '🧑 ' : '👹 ') + '<b>' + esc(v.name) + '</b> <span class="acb">' + T('AC') + ' ' + v.ac + '</span>' + (x.type === 'mon' && x.cr !== '' && x.cr != null ? ' <span class="crb" title="' + esc(crHint(x.cr)) + '">' + crShort(x.cr) + '</span><button class="mini crstep" data-act="cbCrStep" data-id="' + x.id + '" data-d="-1" title="' + esc(T('Weaker: CR −1 (abilities stay, numbers change)')) + '">−</button><button class="mini crstep" data-act="cbCrStep" data-id="' + x.id + '" data-d="1" title="' + esc(T('Stronger: CR +1 (abilities stay, numbers change)')) + '">+</button>' : '') + (down ? ' <span class="fail">' + T('DOWN — death saves') + '</span>' : '') + (out ? ' <span class="fail">' + T('defeated') + '</span>' : '') + '</div>' +
         '<div class="hpbar"><span style="width:' + pct + '%"></span></div><div class="cbhp">' + v.hp + ' / ' + v.hpMax + ' ' + T('HP') + (v.temp ? ' (+' + v.temp + ' ' + T('temp') + ')' : '') + '</div>' +
         '<div class="chips">' + U.condChips(v.holder, 'cbCondDel', 'data-id="' + x.id + '"') + U.condAdder('cbCondAdd', 'data-id="' + x.id + '"') + '</div></div>' +
         '<div class="cbctl"><input type="number" class="tiny" id="amt-' + x.id + '" placeholder="' + esc(T('amt')) + '"><button class="mini dmgb" data-act="cbDmg" data-id="' + x.id + '">' + T('Dmg') + '</button><button class="mini healb" data-act="cbHeal" data-id="' + x.id + '">' + T('Heal') + '</button>' +
@@ -324,6 +324,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
   function builtinView(m) {
     const cr = S.monPrevCr && S.monPrevCr !== m.cr ? S.monPrevCr : m.cr; const shown = atCr(m, cr);
     return '<div class="detail balrow"><b>⚖️ ' + T('Strength (CR)') + '</b> ' + ib('cr') + ' ' + crSelect('prevCr', cr, ' data-on="monPrevCr"') +
+      ' ' + [-1, 1, 2, 3].map(d => '<button class="mini" data-act="monCrStep" data-d="' + d + '" data-cr="' + esc(cr) + '">' + (d > 0 ? '+' : '−') + Math.abs(d) + '</button>').join('') +
       '<br><small>' + T('In D&D this monster is {0}. Pick any other CR: the numbers below balance themselves (your party: level {1}).', crShort(m.cr), partyLevel()) + '</small></div>' +
       statBlock(shown) +
       '<p class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + (cr !== m.cr ? ' (' + crShort(cr) + ')' : '') + '</button>' + (U.obrToScene ? '<button data-act="monToScene" data-id="' + m.id + '">🗺 ' + T('Onto the scene') + '</button><button data-act="tokenPick" data-k="mon" data-n="' + esc(m.name) + '">🖼 ' + T('Token') + '</button>' : '') +
@@ -535,6 +536,20 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     monCopy: ds => { const src0 = monById(ds.id); const src = src0.builtin ? atCr(src0, S.monPrevCr) : src0; const m = normMon(E.clone(src)); m.id = E.uid(); delete m.builtin; m.name = src.name + ' ' + T('(mine)'); S.monPrevCr = null; S.monsters.unshift(m); S.monSel = m.id; commitMon(); },
     monDup: ds => { const m = E.clone(myMon(ds.id)); m.id = E.uid(); m.name += ' ' + T('(copy)'); S.monsters.unshift(m); S.monSel = m.id; commitMon(); },
     monDel: ds => { if (!confirm(T('Delete this monster?'))) return; S.monsters = S.monsters.filter(m => m.id !== ds.id); S.monSel = null; commitMon(); },
+    // CR −1 / +1 / +2 … in the workshop preview: abilities stay, the numbers are balanced again
+    monCrStep: ds => { const L = D.CR_LIST.map(String); const i = L.indexOf(String(ds.cr)); if (i < 0) return; S.monPrevCr = L[Math.max(0, Math.min(L.length - 1, i + Number(ds.d)))]; U.render(); },
+    // the same for a monster already in the fight: keeps the share of HP it has lost and the uses of its abilities
+    cbCrStep: ds => {
+      const x = S.combat.list.find(c => c.id === ds.id); if (!x) return;
+      const L = D.CR_LIST.map(String); const i = L.indexOf(String(x.cr)); if (i < 0) return; const cr = L[Math.max(0, Math.min(L.length - 1, i + Number(ds.d)))]; if (cr === String(x.cr)) return;
+      const base = normMon(E.clone(monById(x.srcId) || { name: x.name, cr: x.cr, ac: x.ac, hp: x.hpMax, abil: x.abil, attacks: x.attacks, abilities: x.abilities, multi: x.multi }));
+      balance(base, cr);
+      const share = x.hpMax ? x.hp / x.hpMax : 1;
+      base.abilities.forEach((ab, k) => { if (x.abilities[k]) ab.id = x.abilities[k].id; });
+      x.name = String(x.name).replace(/\s*\[[^\]]*\]/, '') + ' [' + crShort(cr) + ']';
+      Object.assign(x, { cr, ac: base.ac, hpMax: base.hp, hp: Math.max(x.hp > 0 ? 1 : 0, Math.round(base.hp * share)), attacks: base.attacks, abilities: base.abilities, abil: base.abil });
+      U.saveCombat(); U.toast('⚖️ ' + esc(x.name) + ': ' + crShort(cr)); U.render();
+    },
     monToFight: ds => { const m0 = monById(ds.id); addMon(m0.builtin ? atCr(m0, S.monPrevCr) : m0, 1); U.saveCombat(); U.toast(T('Added to the fight.')); },
     monToScene: ds => { const m0 = monById(ds.id); if (U.obrToScene) U.obrToScene(m0.builtin ? atCr(m0, S.monPrevCr) : m0, 1); },
     cbToScene: () => { const id = document.getElementById('monSel').value; if (!id) { U.toast(T('Choose a monster first.')); return; } const q = Math.max(1, Math.min(20, Number(document.getElementById('monQty').value) || 1)); const cr = (document.getElementById('monCr') || {}).value || ''; if (U.obrToScene) U.obrToScene(atCr(monById(id), cr), q); },
