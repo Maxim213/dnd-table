@@ -85,7 +85,12 @@
   // one filter for the fight, the prepared fights and the workshop (S.mf)
   const monSrc = m => (!m.builtin ? 'mine' : m.scenario ? 'scn' : 'dnd');
   const typeIcon = m => (D.MON_TYPES && D.MON_TYPES[m.type] ? D.MON_TYPES[m.type].icon + ' ' : '');
-  const mf = () => (S.mf = S.mf || { q: '', from: '', to: '', type: '', src: '' });
+  // a scenario can sort its monsters into sides (factions): SCN.active.sides = [{id, name, color, icon}], monster.side / .key (named character) / .boss (tier 1–4)
+  const sides = () => (window.SCN && SCN.active && Array.isArray(SCN.active.sides) ? SCN.active.sides : []);
+  const sideOf = m => sides().find(x => x.id === m.side) || null;
+  const marks = m => (m.boss ? '👑' + (Number(m.boss) > 0 ? ['', 'I', 'II', 'III', 'IV'][m.boss] || '' : '') + ' ' : '') + (m.key ? '⭐ ' : '');
+  const BOSS_TIERS = { 1: 'I — малый (CR ≤ 4)', 2: 'II — босс (CR 5–9)', 3: 'III — большой (CR 10–14)', 4: 'IV — легендарный (CR 15+)' };
+  const mf = () => (S.mf = Object.assign({ q: '', from: '', to: '', type: '', src: '', side: '', who: '' }, S.mf || {}));
   const mfOk = m => {
     const f = mf(); const n = D.crNum(m.cr);
     if (f.q && !(m.name + ' ' + (m.en || '')).toLowerCase().includes(f.q.trim().toLowerCase())) return false;
@@ -93,6 +98,10 @@
     if (f.to !== '' && !(n <= D.crNum(f.to))) return false;
     if (f.type && (m.type || '') !== f.type) return false;
     if (f.src && monSrc(m) !== f.src) return false;
+    if (f.side && m.side !== f.side) return false;
+    if (f.who === 'key' && !m.key) return false;
+    if (f.who === 'boss' && !m.boss) return false;
+    if (/^bd$/.test(f.who || '') && String(m.boss) !== f.who.slice(1)) return false;
     return true;
   };
   U.monFilterBar = function (mons) {
@@ -102,14 +111,16 @@
       '<label class="inl">' + T('to') + ' <select data-on="mf" data-f="to">' + opt('', '—', f.to) + D.CR_LIST.map(cr => opt(cr, cr + crDec(cr), f.to)).join('') + '</select></label>' +
       '<select data-on="mf" data-f="type">' + opt('', T('Any type'), f.type) + Object.keys(D.MON_TYPES || {}).map(k => opt(k, D.MON_TYPES[k].icon + ' ' + D.MON_TYPES[k].name, f.type)).join('') + '</select>' +
       '<select data-on="mf" data-f="src">' + opt('', T('All sources'), f.src) + opt('dnd', '📖 ' + T('Standard D&D'), f.src) + opt('scn', '📜 ' + T('Scenario') + (SCN.active ? ': ' + (SCN.active.title || SCN.active.name) : '') + ' (' + scn + ')', f.src) + opt('mine', '★ ' + T('My monsters'), f.src) + '</select>' +
-      '<small>' + T('{0} found', n) + '</small>' + (f.q || f.from || f.to || f.type || f.src ? ' <button class="mini" data-act="mfReset">↺ ' + T('Reset') + '</button>' : '') + '</div>';
+      (sides().length ? '<select data-on="mf" data-f="side">' + opt('', T('Any side'), f.side) + sides().map(x => opt(x.id, (x.icon || '') + ' ' + x.name + ' (' + mons.filter(m => m.side === x.id).length + ')', f.side)).join('') + '</select>' +
+        '<select data-on="mf" data-f="who">' + opt('', T('Everyone'), f.who) + opt('key', '⭐ ' + T('Key characters'), f.who) + opt('boss', '👑 ' + T('All bosses'), f.who) + Object.keys(BOSS_TIERS).map(k => opt('b' + k, '👑 ' + BOSS_TIERS[k], f.who)).join('') + '</select>' : '') +
+      '<small>' + T('{0} found', n) + '</small>' + (f.q || f.from || f.to || f.type || f.src || f.side || f.who ? ' <button class="mini" data-act="mfReset">↺ ' + T('Reset') + '</button>' : '') + '</div>';
   };
   // a <select> of all monsters: mine first, then the standard ones grouped by CR (only those that pass the filter, plus the chosen one)
   function monSelect(id, mons, first, sel, extra) {
     mons = mons.filter(m => mfOk(m) || (sel && m.id === sel));
     const mine = mons.filter(m => !m.builtin); const std = mons.filter(m => m.builtin).sort(crSort);
     const groups = {}; std.forEach(m => { (groups[m.cr] = groups[m.cr] || []).push(m); });
-    const line = m => opt(m.id, typeIcon(m) + m.name + (m.scenario ? ' 📜' : '') + ' — ' + (m.cr !== '' && m.cr != null ? crShort(m.cr) + ', ' : '') + T('AC') + ' ' + m.ac + ', ' + T('HP') + ' ' + m.hp, sel || '');
+    const line = m => opt(m.id, (sideOf(m) ? sideOf(m).icon + ' ' : typeIcon(m)) + marks(m) + m.name + (m.scenario ? ' 📜' : '') + ' — ' + (m.cr !== '' && m.cr != null ? crShort(m.cr) + ', ' : '') + T('AC') + ' ' + m.ac + ', ' + T('HP') + ' ' + m.hp, sel || '');
     return '<select id="' + id + '"' + (extra || '') + '>' + (first ? '<option value="">' + esc(first) + '</option>' : '') +
       (mine.length ? '<optgroup label="★ ' + esc(T('My monsters')) + '">' + mine.map(line).join('') + '</optgroup>' : '') +
       D.CR_LIST.filter(cr => groups[cr]).map(cr => '<optgroup label="' + esc(crShort(cr) + ' — ' + crHint(cr)) + '">' + groups[cr].map(line).join('') + '</optgroup>').join('') + '</select>';
@@ -290,7 +301,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     let h = '<div class="ph"><h1>' + T('Monster workshop') + '</h1><div class="btnrow"><button class="primary" data-act="monNewOpen">' + T('＋ New monster') + '</button></div></div>' +
       '<p class="lead">' + T('Make your own enemies: start from a ready monster or from scratch, pick how strong it should be (CR), then add attacks and special abilities.') + '</p>';
     const ok = mfOk;
-    const item = m => '<button class="monitem' + (S.monSel === m.id ? ' on' : '') + '" data-act="monSel" data-id="' + m.id + '"><b>' + typeIcon(m) + esc(m.name) + (m.scenario ? ' 📜' : '') + '</b><small>' + (m.cr !== '' && m.cr != null ? '<span class="crb">' + crShort(m.cr) + '</span> ' : '') + T('AC') + ' ' + m.ac + ' · ' + T('HP') + ' ' + m.hp + '</small></button>';
+    const item = m => '<button class="monitem' + (S.monSel === m.id ? ' on' : '') + '" data-act="monSel" data-id="' + m.id + '"' + (sideOf(m) ? ' style="border-left:3px solid ' + esc(sideOf(m).color) + '"' : '') + '><b>' + (sideOf(m) ? sideOf(m).icon + ' ' : typeIcon(m)) + marks(m) + esc(m.name) + (m.scenario ? ' 📜' : '') + '</b><small>' + (m.cr !== '' && m.cr != null ? '<span class="crb">' + crShort(m.cr) + '</span> ' : '') + T('AC') + ' ' + m.ac + ' · ' + T('HP') + ' ' + m.hp + '</small></button>';
     const std = mons.filter(m => m.builtin && ok(m)).sort(crSort);
     const groups = {}; std.forEach(m => { (groups[m.cr] = groups[m.cr] || []).push(m); });
     h += '<div class="monwrap"><div class="monlist">' +
@@ -335,7 +346,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       '<h4>' + T('Preview') + '</h4>' + statBlock(prev);
   }
   function statBlock(m) {
-    return '<div class="detail statblock"><h2>' + typeIcon(m) + esc(m.name) + '</h2>' + (m.type && D.MON_TYPES[m.type] ? '<p class="hint">' + esc(D.MON_TYPES[m.type].name) + (m.scenario ? ' · 📜 ' + T('Scenario') : '') + '</p>' : '') + (m.cr !== '' && m.cr != null ? '<p class="crline"><span class="crb">' + crShort(m.cr) + '</span> ' + esc(crHint(m.cr)) + (crInfo(m.cr) ? ' · ' + T('{0} XP', crInfo(m.cr).xp) : '') + (m.baseCr && m.baseCr !== m.cr ? ' · <small>' + T('in D&D: {0}', crShort(m.baseCr)) + '</small>' : '') + '</p>' : '') +
+    return '<div class="detail statblock"><h2>' + typeIcon(m) + esc(m.name) + '</h2>' + (m.type && D.MON_TYPES[m.type] ? '<p class="hint">' + esc(D.MON_TYPES[m.type].name) + (m.scenario ? ' · 📜 ' + T('Scenario') : '') + (sideOf(m) ? ' · <b style="color:' + esc(sideOf(m).color) + '">' + esc(sideOf(m).icon + ' ' + sideOf(m).name) + '</b>' : '') + (m.key ? ' · ⭐ ' + T('Key character') : '') + (m.boss ? ' · 👑 ' + T('Boss') + (BOSS_TIERS[m.boss] ? ' ' + BOSS_TIERS[m.boss] : '') : '') + '</p>' : '') + (m.cr !== '' && m.cr != null ? '<p class="crline"><span class="crb">' + crShort(m.cr) + '</span> ' + esc(crHint(m.cr)) + (crInfo(m.cr) ? ' · ' + T('{0} XP', crInfo(m.cr).xp) : '') + (m.baseCr && m.baseCr !== m.cr ? ' · <small>' + T('in D&D: {0}', crShort(m.baseCr)) + '</small>' : '') + '</p>' : '') +
       '<p><b>' + T('AC') + '</b> ' + m.ac + ' · <b>' + T('HP') + '</b> ' + m.hp + ' · <b>' + T('Speed') + '</b> ' + esc(m.speed || '30 ft') + '</p>' +
       '<div class="abline">' + D.ABIL.map(a => '<span><b>' + AB(a) + '</b> ' + m.abil[a] + ' (' + sign(E.modOf(m.abil[a])) + ')</span>').join('') + '</div>' +
       '<h4>' + T('Attacks') + (m.multi ? ' — ' + T('{0} per turn', m.multi) : '') + '</h4><ul>' + m.attacks.map(a => '<li><b>' + esc(a.n) + '</b>: ' + T('{0} to hit', sign(Number(a.hit))) + ', ' + esc(a.d) + ' ' + esc(t(a.t)) + ' (≈' + Math.round(U.avgExpr(a.d)) + ')' + (a.plus ? ' + ' + esc(a.plus.d) + ' ' + esc(t(a.plus.t)) : '') + (a.range ? ' (' + esc(a.range) + ')' : '') + '</li>').join('') + '</ul>' +
@@ -520,7 +531,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     },
     monBalance: ds => { const m = myMon(ds.id); const cr = document.getElementById('balCr').value; balance(m, cr); commitMon(); U.toast(T('Balanced to CR {0}.', cr)); },
     monSel: ds => { S.monSel = ds.id || null; S.monPrevCr = null; U.render(); },
-    mfReset: () => { S.mf = { q: '', from: '', to: '', type: '', src: '' }; U.render(); },
+    mfReset: () => { S.mf = { q: '', from: '', to: '', type: '', src: '', side: '', who: '' }; U.render(); },
     monCopy: ds => { const src0 = monById(ds.id); const src = src0.builtin ? atCr(src0, S.monPrevCr) : src0; const m = normMon(E.clone(src)); m.id = E.uid(); delete m.builtin; m.name = src.name + ' ' + T('(mine)'); S.monPrevCr = null; S.monsters.unshift(m); S.monSel = m.id; commitMon(); },
     monDup: ds => { const m = E.clone(myMon(ds.id)); m.id = E.uid(); m.name += ' ' + T('(copy)'); S.monsters.unshift(m); S.monSel = m.id; commitMon(); },
     monDel: ds => { if (!confirm(T('Delete this monster?'))) return; S.monsters = S.monsters.filter(m => m.id !== ds.id); S.monSel = null; commitMon(); },
