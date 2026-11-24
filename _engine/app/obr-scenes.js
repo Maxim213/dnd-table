@@ -29,7 +29,7 @@
     const ty = m.type || (D.MONSTERS[String(m.id || '').replace(/^srd:/, '')] || {}).type;
     return D.MON_TYPES && D.MON_TYPES[ty] ? ty : 'humanoid';
   }
-  const heroToken = c => c.token || customOf(c.name) || ['barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard'].includes(c.classKey) ? c.classKey : 'hero';
+  const heroToken = c => c.token || customOf(c.name) || (['barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard'].includes(c.classKey) ? c.classKey : 'hero');
 
   // ---------- the map maker ----------
   function rnd(seed) { let s = (Number(seed) >>> 0) || 7; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
@@ -227,12 +227,10 @@
   // Owlbear asks the DM ONE «Select folder → Upload scenes» question per uploadScenes() call — so many scenes go in one call
   async function uploadMany(list) {
     if (!list.length) return 0;
-    try { await OBR.assets.uploadScenes(list.map(x => x.full)); return list.length; }
-    catch (e) { console.warn('all scenes in one go', e); }
-    try { await OBR.assets.uploadScenes(list.map(x => x.plain)); return list.length; } // without Owlbear's own walls
-    catch (e) { console.warn('all scenes without walls', e); }
-    let n = 0; for (let i = 0; i < list.length; i += 10) { await OBR.assets.uploadScenes(list.slice(i, i + 10).map(x => x.plain)); n += Math.min(10, list.length - i); } // too big at once → by ten
-    return n;
+    // This resolves when Owlbear opens its import dialog, not when cloud uploads finish.
+    // A failed acknowledgment can also leave a live dialog; never retry automatically.
+    await OBR.assets.uploadScenes(list.map(x => x.full));
+    return list.length;
   }
   async function buildScene(o) {
     const b = B(); if (!b || !b.buildSceneUpload || !OBR || !OBR.assets) throw new Error(T('Owlbear does not allow uploads here.'));
@@ -343,35 +341,138 @@
 
   // ---------- campaign scene import ----------
   const ST = { hide: true };
+  const IMPORT = { busy: false, phase: 'idle', status: '', tokens: [], scenes: [], seen: new Set() };
+  const pendingImport = () => !['idle', 'finished'].includes(IMPORT.phase);
+  const msg = h => { IMPORT.status = h; const m = document.getElementById('scMsg'); if (m) m.innerHTML = h; };
   function scenesPop() {
     const pop = document.getElementById('pop'); if (!pop) return;
-    pop.innerHTML = '<div class="popcard settings scenes" role="dialog"><div class="ph"><h2>🗺 ' + T('Campaign scenes') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
-      '<p>' + T('Choose the Last Kingdom Owlbear_Pack folder to import its maps, encounters and campaign content.') + '</p>' +
-      '<p class="btnrow"><button class="primary" data-act="scFolder">📁 ' + T('Scenario from a folder…') + '</button></p>' +
-      '<p class="hint">' + T('Then choose the destination in Owlbear and click Upload scenes. Open the imported scene from Assets → Scenes.') + '</p>' +
-      '<div id="scMsg" role="status" aria-live="polite"></div></div>';
+    let next = '';
+    if (!IMPORT.busy && IMPORT.phase === 'scenes') {
+      next = '<button class="primary" data-act="' + (IMPORT.tokens.length ? 'scTokens' : 'scFinish') + '">' + T(IMPORT.tokens.length ? 'Scenes confirmed — load tokens' : 'Scenes confirmed — finish') + '</button>';
+      next += ' <button data-act="scRetryScenes">' + T('Retry scenes…') + '</button>';
+    } else if (!IMPORT.busy && IMPORT.phase === 'tokensReady') {
+      next = '<button class="primary" data-act="scTokens">' + T('Load tokens') + '</button>';
+    } else if (!IMPORT.busy && IMPORT.phase === 'tokens') {
+      next = '<button class="primary" data-act="scFinish">' + T('Finish') + '</button> <button data-act="scRetryTokens">' + T('Retry tokens…') + '</button>';
+    }
+    if (!IMPORT.busy && ['scenes', 'tokensReady', 'tokens'].includes(IMPORT.phase)) next += ' <button data-act="scCancel">' + T('Cancel import') + '</button>';
+    pop.innerHTML = '<div class="popcard settings scenes" role="dialog"><div class="ph"><h2>🗺 ' + T('Load campaign') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
+      '<p>' + T('Choose a folder') + '</p>' +
+      '<p class="btnrow"><button class="primary" data-act="scFolder"' + (IMPORT.busy || pendingImport() ? ' disabled' : '') + '>📁 ' + T('Load campaign') + '</button></p>' +
+      '<div id="scMsg" role="status" aria-live="polite">' + IMPORT.status + '</div>' + (next ? '<p class="btnrow">' + next + '</p>' : '') + '</div>';
     pop.classList.add('show');
+    msg(IMPORT.status);
   }
-  const msg = h => { const m = document.getElementById('scMsg'); if (m) m.innerHTML = h; };
   U.ACT.scenes = () => scenesPop();
+
+  U.ACT.scCancel = () => {
+    if (IMPORT.busy || !['scenes', 'tokensReady', 'tokens'].includes(IMPORT.phase) || !confirm(T('Cancel this import? Assets already handed to Owlbear will not be deleted.'))) return;
+    // Only release our local workflow. Owlbear has no supported import-dialog cancellation API.
+    // Keep the receipt because an acknowledged or failed handoff may have created assets.
+    IMPORT.phase = 'idle'; IMPORT.tokens = []; IMPORT.scenes = []; IMPORT.report = ''; IMPORT.makeReport = null;
+    msg(''); scenesPop();
+  };
+  U.ACT.scFinish = () => {
+    if (IMPORT.busy || !['scenes', 'tokens'].includes(IMPORT.phase)) return;
+    // The user confirms the Owlbear dialog; no SDK event proves cloud completion.
+    IMPORT.phase = 'finished'; IMPORT.tokens = []; IMPORT.scenes = [];
+    scenesPop();
+  };
+  async function handoffTokens() {
+    IMPORT.busy = true; scenesPop();
+    try {
+      await OBR.assets.uploadImages(IMPORT.tokens, 'CHARACTER');
+      msg(IMPORT.report + '<br>🖼 ' + T('Tokens handed to Owlbear: {0}. Confirm them in Owlbear before finishing.', IMPORT.tokens.length));
+    } catch (e) {
+      const h = '⚠️ ' + esc(e.message || e); msg(IMPORT.report + '<br>' + h); U.toast(h);
+    } finally { IMPORT.phase = 'tokens'; IMPORT.busy = false; scenesPop(); }
+  }
+  U.ACT.scTokens = async () => {
+    if (IMPORT.busy || !['scenes', 'tokensReady'].includes(IMPORT.phase) || !IMPORT.tokens.length) return;
+    await handoffTokens();
+  };
+  U.ACT.scRetryTokens = async () => {
+    if (IMPORT.busy || IMPORT.phase !== 'tokens' || !confirm(T('Reopen the token import? Existing assets may be duplicated.'))) return;
+    await handoffTokens();
+  };
+  U.ACT.scRetryScenes = async () => {
+    if (IMPORT.busy || IMPORT.phase !== 'scenes' || !confirm(T('Reopen the scene import? Existing assets may be duplicated.'))) return;
+    IMPORT.busy = true; scenesPop();
+    try { IMPORT.report = IMPORT.makeReport(await uploadMany(IMPORT.scenes)); msg(IMPORT.report); }
+    catch (e) { const h = '⚠️ ' + esc(e.message || e); msg(IMPORT.report + '<br>' + h); U.toast(h); }
+    finally { IMPORT.busy = false; scenesPop(); }
+  };
 
   // ---------- 📁 a scenario folder ----------
   // scenario.json: { name, monsters: [my monsters, the app's format], encounters: [{ name, monsters: [{ mid | name, qty }] }],
   //   scenes: [{ name, map: "maps/cave.jpg" | { gen: "cave|dungeon|forest", size: "s|m|l", seed }, cellPx (squares in the picture, px),
   //              encounter: "a fight's name", heroes: true, fog: true, walls: true, tokens: [{ name, token, x, y, hidden }] }] }
   U.ACT.scFolder = () => {
+    if (IMPORT.busy || pendingImport()) return;
+    IMPORT.busy = true; scenesPop();
     const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.setAttribute('webkitdirectory', ''); inp.style.display = 'none';
-    inp.onchange = () => { const files = [...inp.files]; inp.remove(); if (files.length) importFolder(files).catch(e => { const h = '⚠️ ' + esc(e.message || e); msg(h); U.toast(h); console.warn(e); }); };
-    inp.oncancel = () => inp.remove();
-    document.body.appendChild(inp); inp.click();
+    const cancel = () => { inp.remove(); IMPORT.busy = false; scenesPop(); };
+    inp.onchange = async () => {
+      const files = [...inp.files]; inp.remove();
+      if (!files.length) { cancel(); return; }
+      await startImport(files, true);
+    };
+    inp.oncancel = cancel;
+    try { document.body.appendChild(inp); inp.click(); }
+    catch (e) { cancel(); msg('⚠️ ' + esc(e.message || e)); }
   };
+
+  async function startImport(files, fromPicker = false) {
+    if ((!fromPicker && IMPORT.busy) || pendingImport()) return;
+    IMPORT.busy = true;
+    try { await importFolder(files); }
+    catch (e) { const h = '⚠️ ' + esc(e.message || e); msg(h); U.toast(h); IMPORT.phase = 'idle'; }
+    finally { IMPORT.busy = false; scenesPop(); }
+  }
+
+  async function tokenUpload(file, token) {
+    const blob = new Blob([await file.arrayBuffer()], { type: file.type });
+    const url = URL.createObjectURL(blob);
+    try {
+      const image = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error(T('Cannot read token image: {0}', token.src))); i.src = url; });
+      const width = image.naturalWidth, height = image.naturalHeight;
+      if (!(width > 0 && height > 0)) throw new Error(T('Cannot read token image: {0}', token.src));
+      const scale = Math.min(1, 512 / Math.max(width, height));
+      const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(width * scale)); canvas.height = Math.max(1, Math.round(height * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      // PNG keeps alpha; only this in-memory upload copy is resized.
+      const png = await new Promise(ok => canvas.toBlob(ok, 'image/png'));
+      if (!png) throw new Error(T('Cannot read token image: {0}', token.src));
+      const dpi = Number(token.dpi) > 0 ? Number(token.dpi) * scale : Math.max(canvas.width, canvas.height);
+      return B().buildImageUpload(png).name(token.name).dpi(dpi).build();
+    } finally { URL.revokeObjectURL(url); }
+  }
   async function importFolder(files) {
     msg('⏳ ' + T('Reading the campaign folder…'));
     const byPath = {}; files.forEach(f => { const p = (f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name; byPath[p.toLowerCase()] = f; byPath[f.name.toLowerCase()] = byPath[f.name.toLowerCase()] || f; });
     const jf = byPath['scenario.json'] || files.find(f => /scenario\.json$/i.test(f.name)); if (!jf) throw new Error(T('No scenario.json in this folder.'));
-    const sc = JSON.parse(await jf.text()); const log = [];
+    const source = await jf.text();
+    const identity = source + '\n' + files.map(f => (f.webkitRelativePath || f.name) + ':' + f.size + ':' + f.lastModified).sort().join('\n');
+    if (IMPORT.seen.has(identity) && !confirm(T('This campaign folder was already handed to Owlbear. Reupload it? Existing assets may be duplicated.'))) return;
+    const sc = JSON.parse(source); const log = [];
+    if (!sc || typeof sc !== 'object' || !Array.isArray(sc.scenes || []) || !Array.isArray(sc.tokenLibrary || [])) throw new Error(T('Invalid campaign manifest.'));
+    IMPORT.phase = 'preparing'; IMPORT.tokens = []; IMPORT.scenes = [];
+    // Resolve paths relative to scenario.json, including when its parent folder was chosen.
+    const root = (jf.webkitRelativePath || jf.name).split('/').slice(1, -1).join('/');
+    const resolveFile = path => byPath[((root ? root + '/' : '') + String(path)).toLowerCase()] || byPath[String(path).toLowerCase()];
+    const fails = [];
+    const library = sc.tokenLibrary || [];
+    for (const [index, token] of library.entries()) {
+      msg('⏳ ' + T('Preparing tokens: {0} of {1}.', index + 1, library.length));
+      try {
+        if (!token || !token.id || !token.name || !/^tokens\/[^\\]+\.(png|jpe?g|webp|gif|avif|svg)$/i.test(token.src || '') || String(token.src).split('/').includes('..')) throw new Error(T('Invalid token library entry: {0}', token && (token.name || token.id || token.src) || '?'));
+        const file = resolveFile(token.src);
+        if (!file) throw new Error(T('no picture {0}', token.src));
+        IMPORT.tokens.push(await tokenUpload(file, token));
+      } catch (e) { fails.push(esc(token && (token.name || token.src) || '?') + ': ' + esc(e.message || e)); }
+    }
     // the app scenario (monsters, items, shops, sides) can ride along in the same folder: "appScenario": "file.scenario.json" or any *.scenario.json
-    const af = (sc.appScenario && byPath[String(sc.appScenario).toLowerCase()]) || files.find(f => /\.scenario\.json$/i.test(f.name) && f !== jf);
+    const af = (sc.appScenario && resolveFile(sc.appScenario)) || files.find(f => /\.scenario\.json$/i.test(f.name) && f !== jf);
     if (af && window.SCN && SCN.installNow) {
       try { const p = JSON.parse(await af.text()); if (SCN.installNow(p)) { log.push('📜 ' + T('App scenario: {0}', esc((Array.isArray(p.ru) ? p.ru[0] : p.name) || p.id)) + ' (' + Object.keys(p.monsters || {}).length + ' 👹, ' + ((p.shops || []).length + (p.shop ? 1 : 0)) + ' 🛒)'); U.render(); } }
       catch (e) { log.push('⚠️ ' + esc(af.name) + ': ' + esc(e.message || e)); }
@@ -387,13 +488,13 @@
       log.push('📋 ' + esc(en.name));
     });
     U.saveEncounters();
-    const scs = sc.scenes || []; let nOk = 0; const fails = []; const built = [];
+    const scs = sc.scenes || []; let nOk = 0; const built = [];
     for (const [si, s] of scs.entries()) {
       msg('⏳ ' + T('Preparing the scenes…') + ' ' + (si + 1) + ' / ' + scs.length + ' — ' + esc(s.name || ''));
       try {
       let blob, cellPx, map = null, W = 0, H = 0;
       if (s.map && typeof s.map === 'object') { map = U.makeMap(s.map.gen || 'cave', s.map.size || 'm', s.map.seed || 1, 80); blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9)); cellPx = 80; W = map.W; H = map.H; }
-      else { const f = byPath[String(s.map || '').toLowerCase()] || byPath[String(s.map || '').split('/').pop().toLowerCase()]; if (!f) throw new Error(T('no picture {0}', s.map)); blob = f; cellPx = Number(s.cellPx) || 100; }
+      else { const f = resolveFile(s.map || ''); if (!f) throw new Error(T('no picture {0}', s.map)); blob = f; cellPx = Number(s.cellPx) || 100; }
       // tokens: { monster: "srd:goblin" | a name, x, y (square), hidden } — the name comes from the app, so the token links to the fight by itself
       const tokens = (s.tokens || []).map(t => { const m = t.monster ? findMon({ mid: t.monster, name: t.monster }) : null; const name = t.name || (m ? m.name : '?');
         return { name, key: t.token || (m ? monToken(m) : monToken({ name })), x: Number(t.x) || 0, y: Number(t.y) || 0, hidden: t.hidden !== false }; });
@@ -408,18 +509,26 @@
       log.push('🗺 ' + esc(s.name || ''));
       } catch (e) { console.warn('scene upload', s.name, e); fails.push(esc(s.name || '?') + ': ' + esc((e && (e.message || e.error || JSON.stringify(e))) || e)); }
     }
-    if (built.length) { msg('⏳ ' + T('Owlbear asks where to put the scenes: pick a folder (Default is fine) → «Upload scenes». Then wait — {0} maps are uploading.', built.length)); try { nOk = await uploadMany(built); } catch (e) { fails.push(esc((e && (e.message || e.error)) || String(e))); } }
+    IMPORT.scenes = built;
+    if (built.length || IMPORT.tokens.length) IMPORT.seen.add(identity);
+    if (built.length) {
+      msg('⏳ ' + T('Scenes prepared: {0} of {1}.', built.length, scs.length));
+      try { nOk = await uploadMany(built); }
+      catch (e) { const h = esc(e.message || e); fails.push(h); U.toast('⚠️ ' + h); }
+    }
     if (fails.length) log.unshift('⚠️ ' + T('Import errors:') + '<br>' + fails.slice(0, 8).join('<br>'));
-    if (scs.length) log.unshift('🗺 ' + T('Scenes uploaded: {0} of {1}. Owlbear → Scenes (top left).', nOk, scs.length));
-    U.render(); scenesPop();
-    const failed = fails.length > 0 || nOk < scs.length;
-    msg((failed ? '⚠️ ' + T('Scenario «{0}»: import incomplete.', esc(sc.name || '')) : '✅ ' + T('Scenario «{0}» loaded:', esc(sc.name || ''))) + '<br>' + log.join('<br>'));
-    if (failed) U.toast('⚠️ ' + T('Scenes uploaded: {0} of {1}. Owlbear → Scenes (top left).', nOk, scs.length) + '<br>' + fails.slice(0, 3).join('<br>'));
+    log.unshift('🖼 ' + T('Tokens prepared: {0} of {1}.', IMPORT.tokens.length, library.length));
+    if (built.length) log.push(T('Confirm the scene import in Owlbear before continuing.'));
+    IMPORT.makeReport = handed => '<b>' + esc(sc.name || '') + '</b><br>' + (scs.length ? '🗺 ' + T('Scenes handed to Owlbear: {0} of {1}.', handed, scs.length) + '<br>' : '') + log.join('<br>');
+    IMPORT.report = IMPORT.makeReport(nOk);
+    IMPORT.phase = built.length ? 'scenes' : IMPORT.tokens.length ? 'tokensReady' : 'finished';
+    msg(IMPORT.report); U.render();
+    if (fails.length) U.toast('⚠️ ' + T('Import errors:') + '<br>' + fails.slice(0, 3).join('<br>'));
   }
 
-  U._importScenario = importFolder; // (tests)
+  U._importScenario = startImport;
   // the 🗺 button in the DM's top bar
   const top0 = U.renderTop;
-  U.renderTop = function () { top0(); const el = document.getElementById('topCtl'); const ps = el && el.querySelector('[data-act="panelSize"]'); if (el && U.DM) (ps || el).insertAdjacentHTML(ps ? 'beforebegin' : 'beforeend', '<button class="tb" data-act="scenes" title="' + esc(T('Campaign scenes')) + '">🗺</button>'); };
+  U.renderTop = function () { top0(); const el = document.getElementById('topCtl'); const ps = el && el.querySelector('[data-act="panelSize"]'); if (el && U.DM) (ps || el).insertAdjacentHTML(ps ? 'beforebegin' : 'beforeend', '<button class="tb" data-act="scenes" title="' + esc(T('Load campaign')) + '">🗺</button>'); };
   if (document.getElementById('topCtl')) U.renderTop();
 })(window.UI);
