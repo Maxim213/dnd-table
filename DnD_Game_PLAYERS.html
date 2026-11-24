@@ -350,7 +350,7 @@ details.cbsetup { margin: 8px 0; border: 1px solid #3a2e20; border-radius: 8px; 
 .le s, #toast s { opacity: .55; }
 @media (prefers-reduced-motion: reduce) { #diceAnim.rolling .die, #diceAnim.landed .num, #diceAnim.rolling .d20, #diceAnim.landed .dcol { animation: none; } }
 /* top bar: music, sound, settings */
-.topctl { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+.topctl { display: inline-flex; flex-wrap: wrap; gap: 3px; margin-left: 6px; vertical-align: middle; max-width: 100%; }
 .topctl .tb { padding: 1px 6px; font-size: 13px; border-radius: 6px; line-height: 1.4; }
 .topctl .tb.on { border-color: var(--gold); background: #3a3127; }
 .popcard.settings { max-width: 440px; width: 92vw; text-align: left; max-height: 88vh; overflow-y: auto; }
@@ -1461,29 +1461,6 @@ window.DND = window.DND || {};
     { name: 'Amulet of Health (lite)', rarity: 'Rare', requiresAttunement: true, desc: '+2 Constitution.', effects: [{ type: 'ability', ability: 'CON', value: 2 }] }
   ];
 
-  // Ready-made practice character (the paper version is in _Old/03_Characters/)
-  D.SAMPLE_CHARACTERS = [{
-    id: 'sample-bran', name: 'Bran Ashford', player: 'Practice', level: 1,
-    classKey: 'fighter', speciesKey: 'human', speciesOpt: '', backgroundKey: 'soldier',
-    bgMode: '21', bgPlus2: 'STR', bgPlus1: 'CON',
-    method: 'standard', base: { STR: 15, DEX: 14, CON: 13, INT: 8, WIS: 12, CHA: 10 },
-    opts: { fightingStyle: 'gwf', humanFeat: 'tough' },
-    picks: { class: ['Perception', 'Survival'], species: ['Stealth'], masteries: ['greatsword', 'javelin', 'flail'] },
-    inventory: [
-      { id: 'i1', name: 'Chain Mail', armor: 'chainmail', equipped: true, qty: 1 },
-      { id: 'i2', name: 'Greatsword', weapon: 'greatsword', equipped: true, qty: 1 },
-      { id: 'i3', name: 'Flail', weapon: 'flail', qty: 1 },
-      { id: 'i4', name: 'Javelin', weapon: 'javelin', qty: 8 },
-      { id: 'i5', name: 'Dungeoneer\'s Pack', qty: 1, desc: 'Backpack, crowbar, hammer, 10 pitons, 10 torches, tinderbox, 10 days rations, waterskin, 50 ft rope.' }
-    ],
-    gold: 4,
-    details: {
-      who: 'An ex-soldier who left the army after his squad was wiped out by goblins.',
-      want: 'To make the roads safe — and to get paid for it.',
-      flaw: 'Charges in first, thinks later.',
-      secret: 'He deserted the night of the ambush.'
-    }
-  }];
 })(window.DND);
 
 </script>
@@ -6274,6 +6251,19 @@ window.DND_RU.UI = {
   'Bag': 'Инвентарь',
   'Card': 'Карточка',
   'Rolls': 'Броски',
+  'Preparing the scenes…': 'Готовлю сцены…',
+  'Owlbear asks where to put the scenes: pick a folder (Default is fine) → «Upload scenes». Then wait — {0} maps are uploading.': 'Owlbear спросит, куда положить сцены: выбери папку (Default подойдёт) → «Upload scenes». Потом подожди — грузится {0} карт.',
+  'Owlbear did not take {0} of {1} scenes:': 'Owlbear не принял {0} из {1} сцен:',
+  'Scenes uploaded: {0} of {1}. Owlbear → Scenes (top left).': 'Сцен загружено: {0} из {1}. Они в Owlbear: Assets → Scenes (открой сцену двойным кликом).',
+  'App scenario: {0}': 'Сценарий приложения: {0}',
+  'Weaker: CR −1 (abilities stay, numbers change)': 'Слабее: ПО −1 (приёмы остаются, цифры меняются)',
+  'Stronger: CR +1 (abilities stay, numbers change)': 'Сильнее: ПО +1 (приёмы остаются, цифры меняются)',
+  'Any side': 'Любая сторона',
+  'Everyone': 'Все',
+  'Key characters': 'Ключевые персонажи',
+  'All bosses': 'Все боссы',
+  'Key character': 'Ключевой персонаж',
+  'Boss': 'Босс',
   'Show to everybody': 'Показать всем',
   'A picture (a map, a letter, an NPC portrait) and / or a text. It pops up on every screen and stays in the players\' handouts.': 'Картинка (карта, письмо, портрет NPC) и / или текст. Всплывёт у всех на экране и останется в раздатках игроков.',
   'Title': 'Заголовок',
@@ -6467,7 +6457,17 @@ window.DND_RU.UI = {
   'no answer — the app rolled': 'не ответил — бросило приложение', 'rolled by the player': 'бросил игрок', 'the player rolls it himself…': 'игрок бросает сам…',
   'the target is {0}': 'цель: {0}', 'you are {0}': 'ты: {0}', '{0} may cast Shield (+5 AC) — waiting for the player…': '{0} может наложить Щит (+5 КД) — ждём игрока…',
   'On the map: pick the ⚔️ D&D tool in the Owlbear toolbar (key Y). Click a token or an empty spot — the window shows what you can do there. Drag your token — a ruler shows your movement.': 'На карте: выбери инструмент ⚔️ D&D в панели инструментов Owlbear (клавиша Y). Кликни по токену или пустому месту — окно покажет, что там можно сделать. Тяни свой токен — линейка покажет движение.',
-  'the next attack roll or check of this ally (before your next turn) has Advantage.': 'следующая атака или проверка этого союзника (до твоего следующего хода) — с преимуществом.'
+  'the next attack roll or check of this ally (before your next turn) has Advantage.': 'следующая атака или проверка этого союзника (до твоего следующего хода) — с преимуществом.',
+  'Campaign scenes': 'Сцены кампании',
+  'Nobody yet. Use 🗺 Onto the scene on a monster or character card.': 'Пока никого. Нажми 🗺 На сцену на карточке монстра или персонажа.',
+  'Put its token on the Owlbear scene, hidden. Right click → Show to reveal it.': 'Поставить токен на сцену спрятанным. Правый клик → Show, чтобы показать игрокам.',
+  'Reading the campaign folder…': 'Читаю папку кампании…',
+  'Import errors:': 'Ошибки импорта:',
+  'Choose the Last Kingdom Owlbear_Pack folder to import its maps, encounters and campaign content.': 'Выбери папку Last Kingdom → Owlbear_Pack: загрузятся карты, подготовленные бои и содержимое кампании.',
+  'Then choose the destination in Owlbear and click Upload scenes. Open the imported scene from Assets → Scenes.': 'Затем выбери папку назначения в Owlbear и нажми Upload scenes. Загруженную сцену открой в Assets → Scenes.',
+  'Scenario «{0}»: import incomplete.': 'Сценарий «{0}»: импорт завершён не полностью.',
+  'The map image is empty.': 'Файл карты пуст.',
+  '<p>No one in the fight yet.</p><p>Add characters and monsters above, or start a <b>📋 Prepared fight</b>.</p>': '<p>В бою пока никого.</p><p>Добавь персонажей и монстров выше или запусти <b>📋 Готовый бой</b>.</p>'
 };
 
 </script>
@@ -6665,6 +6665,8 @@ window.SCN = (function () {
     Object.keys(p.feats || {}).forEach(k => { D.GENERAL_FEATS = D.GENERAL_FEATS || {}; D.GENERAL_FEATS[k] = tag(Object.assign({ abil: ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] }, p.feats[k])); });
     Object.keys(p.monsters || {}).forEach(k => { D.MONSTERS[k] = tag(p.monsters[k]); });
   }
+  // install + switch on a scenario at once, without a reload (the Owlbear «scenario from a folder» brings the app scenario along)
+  SCN.installNow = p => { if (!SCN.valid(p)) return false; SCN.save(p); SCN.choose(p.id); SCN.active = p; try { apply(p); } catch (e) { console.error(e); return false; } (D.AFTER_LANG || []).forEach(f => { try { f(D.LANG || 'ru'); } catch (e) {} }); return true; };
   const id = SCN.activeId(); const all = SCN.all();
   if (id && all[id] && SCN.valid(all[id])) {
     SCN.active = all[id];
@@ -7888,7 +7890,7 @@ window.UI = (function () {
     const head = U.PLAYER
       ? '<h1>' + T('My characters') + '</h1><div class="btnrow"><button class="primary" data-act="newChar">' + T('＋ New character') + '</button><button data-act="importChar">' + T('📥 Import file from DM') + '</button></div>'
       : '<h1>' + T('Characters') + '</h1><div class="btnrow"><button class="primary" data-act="newChar">' + T('＋ New character') + '</button><button data-act="importChar">' + T('📥 Import file(s)') + '</button>' +
-        '<button data-act="loadSample">' + T('Load practice hero (Bran)') + '</button><button data-act="backup">' + T('💾 Save game file') + '</button></div>';
+        '<button data-act="backup">' + T('💾 Save game file') + '</button></div>';
     const tip = U.PLAYER
       ? '<div class="tipbox">' + T('<b>How it works:</b> 1) Create your character. 2) Click <b>📤 Send to DM</b> and send the file on Discord. 3) When the DM sends you an updated file (level up, new items), click <b>📥 Import file from DM</b>.<br>💾 Your character is saved automatically in this browser on this computer. The exported file is your backup.') + '</div>'
       : '<div class="tipbox">' + T('<b>Saving:</b> everything in this game saves automatically in this browser. At the end of an evening click <b>💾 Save game file</b> and keep the file in <code>Campaigns/{0}/</code>. Your other games: the <b>🎲</b> button at the top.', esc(U.fileName(U.game ? U.game.name : 'game'))) + '<br>' +
@@ -8253,7 +8255,7 @@ window.UI = (function () {
     const ta = (k, label, ph) => '<label class="blk">' + label + '<textarea data-on="bind" data-path="details.' + k + '" placeholder="' + esc(ph) + '">' + esc(c.details[k] || '') + '</textarea></label>';
     return '<h2>' + T('9. Name & story') + '</h2><p class="lead">' + T('Give your hero a name and three short lines. That\'s enough to start roleplaying!') + '</p>' +
       '<div class="detail row2"><div>' +
-      '<label class="blk">' + T('Character name') + '<input data-on="bind" data-path="name" value="' + esc(c.name) + '" placeholder="' + esc(T('e.g. Bran Ashford')) + '"></label>' +
+      '<label class="blk">' + T('Character name') + '<input data-on="bind" data-path="name" value="' + esc(c.name) + '"></label>' +
       '<label class="blk">' + T('Portrait (any picture — e.g. made in ChatGPT)') + '</label><div class="portraitrow">' + U.portrait(c, E.compute(c), 'md') + '<div><button data-act="pickPortrait">' + T('Upload picture…') + '</button>' + (c.portrait ? ' <button class="danger" data-act="clearPortrait">' + T('Remove') + '</button>' : '') + '</div></div>' +
       '</div><div>' + ta('who', T('Who are you, in one sentence?'), T('An ex-soldier who…')) + ta('want', T('What do you want?'), T('Revenge, gold, to find my sister…')) + ta('flaw', T('Flaw or fear'), T('Charges in first, thinks later')) + ta('secret', T('A secret (only the DM will know)'), '') + '</div></div>' +
       '<div class="detail">' + ta('appearance', T('What do you look like?'), T('Tall, scar over the left eye…')) + ta('backstory', T('Backstory (optional)'), '') + '</div>';
@@ -8309,10 +8311,6 @@ window.UI = (function () {
 
   Object.assign(U.ACT, {
     newChar: () => { const c = E.newChar(); S.chars.push(c); S.charId = c.id; S.step = 0; U.saveChars(); U.go('builder'); },
-    loadSample: () => {
-      D.SAMPLE_CHARACTERS.forEach(s => { const c = E.normalize(E.clone(s)); c.id = E.uid(); S.chars.push(c); });
-      U.saveChars(); U.render(); U.toast(T('Bran added — open his sheet!'));
-    },
     openSheet: ds => { const c = U.byId(ds.id); if (c && c.lvlUp && S.view === 'builder') { U.go('levelup', ds.id); return; } U.go('sheet', ds.id); },
     openBuilder: ds => { S.step = 0; U.go('builder', ds.id); },
     toggleParty: ds => { const c = U.byId(ds.id); c.party = !c.party; U.commit(); },
@@ -8974,7 +8972,12 @@ window.UI = (function () {
   // one filter for the fight, the prepared fights and the workshop (S.mf)
   const monSrc = m => (!m.builtin ? 'mine' : m.scenario ? 'scn' : 'dnd');
   const typeIcon = m => (D.MON_TYPES && D.MON_TYPES[m.type] ? D.MON_TYPES[m.type].icon + ' ' : '');
-  const mf = () => (S.mf = S.mf || { q: '', from: '', to: '', type: '', src: '' });
+  // a scenario can sort its monsters into sides (factions): SCN.active.sides = [{id, name, color, icon}], monster.side / .key (named character) / .boss (tier 1–4)
+  const sides = () => (window.SCN && SCN.active && Array.isArray(SCN.active.sides) ? SCN.active.sides : []);
+  const sideOf = m => sides().find(x => x.id === m.side) || null;
+  const marks = m => (m.boss ? '👑' + (Number(m.boss) > 0 ? ['', 'I', 'II', 'III', 'IV'][m.boss] || '' : '') + ' ' : '') + (m.key ? '⭐ ' : '');
+  const BOSS_TIERS = { 1: 'I — малый (CR ≤ 4)', 2: 'II — босс (CR 5–9)', 3: 'III — большой (CR 10–14)', 4: 'IV — легендарный (CR 15+)' };
+  const mf = () => (S.mf = Object.assign({ q: '', from: '', to: '', type: '', src: '', side: '', who: '' }, S.mf || {}));
   const mfOk = m => {
     const f = mf(); const n = D.crNum(m.cr);
     if (f.q && !(m.name + ' ' + (m.en || '')).toLowerCase().includes(f.q.trim().toLowerCase())) return false;
@@ -8982,6 +8985,10 @@ window.UI = (function () {
     if (f.to !== '' && !(n <= D.crNum(f.to))) return false;
     if (f.type && (m.type || '') !== f.type) return false;
     if (f.src && monSrc(m) !== f.src) return false;
+    if (f.side && m.side !== f.side) return false;
+    if (f.who === 'key' && !m.key) return false;
+    if (f.who === 'boss' && !m.boss) return false;
+    if (/^bd$/.test(f.who || '') && String(m.boss) !== f.who.slice(1)) return false;
     return true;
   };
   U.monFilterBar = function (mons) {
@@ -8991,14 +8998,16 @@ window.UI = (function () {
       '<label class="inl">' + T('to') + ' <select data-on="mf" data-f="to">' + opt('', '—', f.to) + D.CR_LIST.map(cr => opt(cr, cr + crDec(cr), f.to)).join('') + '</select></label>' +
       '<select data-on="mf" data-f="type">' + opt('', T('Any type'), f.type) + Object.keys(D.MON_TYPES || {}).map(k => opt(k, D.MON_TYPES[k].icon + ' ' + D.MON_TYPES[k].name, f.type)).join('') + '</select>' +
       '<select data-on="mf" data-f="src">' + opt('', T('All sources'), f.src) + opt('dnd', '📖 ' + T('Standard D&D'), f.src) + opt('scn', '📜 ' + T('Scenario') + (SCN.active ? ': ' + (SCN.active.title || SCN.active.name) : '') + ' (' + scn + ')', f.src) + opt('mine', '★ ' + T('My monsters'), f.src) + '</select>' +
-      '<small>' + T('{0} found', n) + '</small>' + (f.q || f.from || f.to || f.type || f.src ? ' <button class="mini" data-act="mfReset">↺ ' + T('Reset') + '</button>' : '') + '</div>';
+      (sides().length ? '<select data-on="mf" data-f="side">' + opt('', T('Any side'), f.side) + sides().map(x => opt(x.id, (x.icon || '') + ' ' + x.name + ' (' + mons.filter(m => m.side === x.id).length + ')', f.side)).join('') + '</select>' +
+        '<select data-on="mf" data-f="who">' + opt('', T('Everyone'), f.who) + opt('key', '⭐ ' + T('Key characters'), f.who) + opt('boss', '👑 ' + T('All bosses'), f.who) + Object.keys(BOSS_TIERS).map(k => opt('b' + k, '👑 ' + BOSS_TIERS[k], f.who)).join('') + '</select>' : '') +
+      '<small>' + T('{0} found', n) + '</small>' + (f.q || f.from || f.to || f.type || f.src || f.side || f.who ? ' <button class="mini" data-act="mfReset">↺ ' + T('Reset') + '</button>' : '') + '</div>';
   };
   // a <select> of all monsters: mine first, then the standard ones grouped by CR (only those that pass the filter, plus the chosen one)
   function monSelect(id, mons, first, sel, extra) {
     mons = mons.filter(m => mfOk(m) || (sel && m.id === sel));
     const mine = mons.filter(m => !m.builtin); const std = mons.filter(m => m.builtin).sort(crSort);
     const groups = {}; std.forEach(m => { (groups[m.cr] = groups[m.cr] || []).push(m); });
-    const line = m => opt(m.id, typeIcon(m) + m.name + (m.scenario ? ' 📜' : '') + ' — ' + (m.cr !== '' && m.cr != null ? crShort(m.cr) + ', ' : '') + T('AC') + ' ' + m.ac + ', ' + T('HP') + ' ' + m.hp, sel || '');
+    const line = m => opt(m.id, (sideOf(m) ? sideOf(m).icon + ' ' : typeIcon(m)) + marks(m) + m.name + (m.scenario ? ' 📜' : '') + ' — ' + (m.cr !== '' && m.cr != null ? crShort(m.cr) + ', ' : '') + T('AC') + ' ' + m.ac + ', ' + T('HP') + ' ' + m.hp, sel || '');
     return '<select id="' + id + '"' + (extra || '') + '>' + (first ? '<option value="">' + esc(first) + '</option>' : '') +
       (mine.length ? '<optgroup label="★ ' + esc(T('My monsters')) + '">' + mine.map(line).join('') + '</optgroup>' : '') +
       D.CR_LIST.filter(cr => groups[cr]).map(cr => '<optgroup label="' + esc(crShort(cr) + ' — ' + crHint(cr)) + '">' + groups[cr].map(line).join('') + '</optgroup>').join('') + '</select>';
@@ -9104,13 +9113,13 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     let h = '<div class="ph"><h1>' + T('Fight') + ' ' + ib('combat') + '</h1><div class="btnrow">' +
       (!live ? '<button class="primary" data-act="cbStart">' + T('▶ Start combat') + '</button><button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button>'
         : '<button class="primary" data-act="cbNext">' + T('Next turn ▶') + '</button><span class="round">' + T('Round') + ' <b>' + cb.round + '</b></span>') + '</div></div>';
-    let setup = '<div class="btnrow">' + (live ? '<button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button>' : '') + '<button data-act="cbSavePrep" title="' + esc(T('Save these monsters as a prepared fight')) + '">' + T('📋 Save as prepared') + '</button><button data-act="cbPractice">' + T('Practice fight') + '</button><button class="danger" data-act="cbClear">' + (live ? T('⏹ End the fight') : T('Clear')) + '</button></div>';
+    let setup = '<div class="btnrow">' + (live ? '<button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button>' : '') + '<button data-act="cbSavePrep" title="' + esc(T('Save these monsters as a prepared fight')) + '">' + T('📋 Save as prepared') + '</button><button class="danger" data-act="cbClear">' + (live ? T('⏹ End the fight') : T('Clear')) + '</button></div>';
     setup += U.monFilterBar(mons) + '<div class="addrow cbadd">' +
       '<select data-on="cbAddPc"><option value="">' + T('＋ Add character…') + '</option>' + S.chars.filter(c => !list.some(x => x.charId === c.id)).map(c => opt(c.id, c.name || T('Unnamed'), '')).join('') + '</select>' +
       monSelect('monSel', mons, T('Monster…')) +
       '<select id="monCr" title="' + esc(T('Make it stronger or weaker (the numbers balance themselves)')) + '">' + opt('', T('CR as in D&D'), '') + D.CR_LIST.map(cr => opt(cr, crShort(cr) + ' — ' + crHint(cr), '')).join('') + '</select>' +
       '<input id="monQty" type="number" min="1" max="20" value="1" class="tiny" title="' + esc(T('How many')) + '"><button data-act="cbAddMon">' + T('＋ Add') + '</button>' +
-      (U.obrToScene ? '<button data-act="cbToScene" title="' + esc(T('Put its token on the Owlbear scene (hidden or not — see 🗺)')) + '">🗺 ' + T('Onto the scene') + '</button>' : '') +
+      (U.obrToScene ? '<button data-act="cbToScene" title="' + esc(T('Put its token on the Owlbear scene, hidden. Right click → Show to reveal it.')) + '">🗺 ' + T('Onto the scene') + '</button>' : '') +
       '<button data-act="cTab" data-v="monsters">' + T('✎ Make a custom monster') + '</button></div>' + (U.sceneBox ? U.sceneBox() : '');
 
     const monsIn = list.filter(x => x.type === 'mon');
@@ -9123,13 +9132,13 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       const out = isOut(x); const down = x.type === 'pc' && v.hp === 0;
       return '<div class="cb' + (i === cb.turn ? ' active' : '') + (out ? ' out' : '') + ' ' + x.type + '">' +
         '<input class="init" type="number" data-on="cbInit" data-id="' + x.id + '" value="' + (x.init == null ? '' : x.init) + '" title="' + esc(T('Initiative')) + '" placeholder="–">' +
-        '<div class="cbmain"><div class="cbn">' + (x.type === 'pc' ? '🧑 ' : '👹 ') + '<b>' + esc(v.name) + '</b> <span class="acb">' + T('AC') + ' ' + v.ac + '</span>' + (x.type === 'mon' && x.cr !== '' && x.cr != null ? ' <span class="crb" title="' + esc(crHint(x.cr)) + '">' + crShort(x.cr) + '</span>' : '') + (down ? ' <span class="fail">' + T('DOWN — death saves') + '</span>' : '') + (out ? ' <span class="fail">' + T('defeated') + '</span>' : '') + '</div>' +
+        '<div class="cbmain"><div class="cbn">' + (x.type === 'pc' ? '🧑 ' : '👹 ') + '<b>' + esc(v.name) + '</b> <span class="acb">' + T('AC') + ' ' + v.ac + '</span>' + (x.type === 'mon' && x.cr !== '' && x.cr != null ? ' <span class="crb" title="' + esc(crHint(x.cr)) + '">' + crShort(x.cr) + '</span><button class="mini crstep" data-act="cbCrStep" data-id="' + x.id + '" data-d="-1" title="' + esc(T('Weaker: CR −1 (abilities stay, numbers change)')) + '">−</button><button class="mini crstep" data-act="cbCrStep" data-id="' + x.id + '" data-d="1" title="' + esc(T('Stronger: CR +1 (abilities stay, numbers change)')) + '">+</button>' : '') + (down ? ' <span class="fail">' + T('DOWN — death saves') + '</span>' : '') + (out ? ' <span class="fail">' + T('defeated') + '</span>' : '') + '</div>' +
         '<div class="hpbar"><span style="width:' + pct + '%"></span></div><div class="cbhp">' + v.hp + ' / ' + v.hpMax + ' ' + T('HP') + (v.temp ? ' (+' + v.temp + ' ' + T('temp') + ')' : '') + '</div>' +
         '<div class="chips">' + U.condChips(v.holder, 'cbCondDel', 'data-id="' + x.id + '"') + U.condAdder('cbCondAdd', 'data-id="' + x.id + '"') + '</div></div>' +
         '<div class="cbctl"><input type="number" class="tiny" id="amt-' + x.id + '" placeholder="' + esc(T('amt')) + '"><button class="mini dmgb" data-act="cbDmg" data-id="' + x.id + '">' + T('Dmg') + '</button><button class="mini healb" data-act="cbHeal" data-id="' + x.id + '">' + T('Heal') + '</button>' +
         (down ? '<button class="mini" data-act="cbDeath" data-id="' + x.id + '">' + T('Death save') + '</button>' : '') +
         '<button class="mini" data-act="cbTurn" data-i="' + i + '" title="' + esc(T('Make it this creature\'s turn')) + '">▶</button><button class="mini danger" data-act="cbDel" data-id="' + x.id + '">✕</button></div></div>';
-    }).join('') : '<div class="emptybig">' + T('<p>No one in the fight yet.</p><p>Add characters and monsters above, start a <b>📋 Prepared fight</b>, or click <b>Practice fight</b>.</p>') + '</div>') + '</div>';
+    }).join('') : '<div class="emptybig">' + T('<p>No one in the fight yet.</p><p>Add characters and monsters above, or start a <b>📋 Prepared fight</b>.</p>') + '</div>') + '</div>';
 
     h += '<div class="cbactive">';
     if (active && !cbView(active)) h += '<p class="warn">⚠️ ' + T('This hero is not in the game any more — remove the row or press Next turn.') + '</p>';
@@ -9179,7 +9188,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     let h = '<div class="ph"><h1>' + T('Monster workshop') + '</h1><div class="btnrow"><button class="primary" data-act="monNewOpen">' + T('＋ New monster') + '</button></div></div>' +
       '<p class="lead">' + T('Make your own enemies: start from a ready monster or from scratch, pick how strong it should be (CR), then add attacks and special abilities.') + '</p>';
     const ok = mfOk;
-    const item = m => '<button class="monitem' + (S.monSel === m.id ? ' on' : '') + '" data-act="monSel" data-id="' + m.id + '"><b>' + typeIcon(m) + esc(m.name) + (m.scenario ? ' 📜' : '') + '</b><small>' + (m.cr !== '' && m.cr != null ? '<span class="crb">' + crShort(m.cr) + '</span> ' : '') + T('AC') + ' ' + m.ac + ' · ' + T('HP') + ' ' + m.hp + '</small></button>';
+    const item = m => '<button class="monitem' + (S.monSel === m.id ? ' on' : '') + '" data-act="monSel" data-id="' + m.id + '"' + (sideOf(m) ? ' style="border-left:3px solid ' + esc(sideOf(m).color) + '"' : '') + '><b>' + (sideOf(m) ? sideOf(m).icon + ' ' : typeIcon(m)) + marks(m) + esc(m.name) + (m.scenario ? ' 📜' : '') + '</b><small>' + (m.cr !== '' && m.cr != null ? '<span class="crb">' + crShort(m.cr) + '</span> ' : '') + T('AC') + ' ' + m.ac + ' · ' + T('HP') + ' ' + m.hp + '</small></button>';
     const std = mons.filter(m => m.builtin && ok(m)).sort(crSort);
     const groups = {}; std.forEach(m => { (groups[m.cr] = groups[m.cr] || []).push(m); });
     h += '<div class="monwrap"><div class="monlist">' +
@@ -9202,6 +9211,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
   function builtinView(m) {
     const cr = S.monPrevCr && S.monPrevCr !== m.cr ? S.monPrevCr : m.cr; const shown = atCr(m, cr);
     return '<div class="detail balrow"><b>⚖️ ' + T('Strength (CR)') + '</b> ' + ib('cr') + ' ' + crSelect('prevCr', cr, ' data-on="monPrevCr"') +
+      ' ' + [-1, 1, 2, 3].map(d => '<button class="mini" data-act="monCrStep" data-d="' + d + '" data-cr="' + esc(cr) + '">' + (d > 0 ? '+' : '−') + Math.abs(d) + '</button>').join('') +
       '<br><small>' + T('In D&D this monster is {0}. Pick any other CR: the numbers below balance themselves (your party: level {1}).', crShort(m.cr), partyLevel()) + '</small></div>' +
       statBlock(shown) +
       '<p class="btnrow"><button class="primary" data-act="monToFight" data-id="' + m.id + '">' + T('＋ Add to fight') + (cr !== m.cr ? ' (' + crShort(cr) + ')' : '') + '</button>' + (U.obrToScene ? '<button data-act="monToScene" data-id="' + m.id + '">🗺 ' + T('Onto the scene') + '</button><button data-act="tokenPick" data-k="mon" data-n="' + esc(m.name) + '">🖼 ' + T('Token') + '</button>' : '') +
@@ -9224,7 +9234,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       '<h4>' + T('Preview') + '</h4>' + statBlock(prev);
   }
   function statBlock(m) {
-    return '<div class="detail statblock"><h2>' + typeIcon(m) + esc(m.name) + '</h2>' + (m.type && D.MON_TYPES[m.type] ? '<p class="hint">' + esc(D.MON_TYPES[m.type].name) + (m.scenario ? ' · 📜 ' + T('Scenario') : '') + '</p>' : '') + (m.cr !== '' && m.cr != null ? '<p class="crline"><span class="crb">' + crShort(m.cr) + '</span> ' + esc(crHint(m.cr)) + (crInfo(m.cr) ? ' · ' + T('{0} XP', crInfo(m.cr).xp) : '') + (m.baseCr && m.baseCr !== m.cr ? ' · <small>' + T('in D&D: {0}', crShort(m.baseCr)) + '</small>' : '') + '</p>' : '') +
+    return '<div class="detail statblock"><h2>' + typeIcon(m) + esc(m.name) + '</h2>' + (m.type && D.MON_TYPES[m.type] ? '<p class="hint">' + esc(D.MON_TYPES[m.type].name) + (m.scenario ? ' · 📜 ' + T('Scenario') : '') + (sideOf(m) ? ' · <b style="color:' + esc(sideOf(m).color) + '">' + esc(sideOf(m).icon + ' ' + sideOf(m).name) + '</b>' : '') + (m.key ? ' · ⭐ ' + T('Key character') : '') + (m.boss ? ' · 👑 ' + T('Boss') + (BOSS_TIERS[m.boss] ? ' ' + BOSS_TIERS[m.boss] : '') : '') + '</p>' : '') + (m.cr !== '' && m.cr != null ? '<p class="crline"><span class="crb">' + crShort(m.cr) + '</span> ' + esc(crHint(m.cr)) + (crInfo(m.cr) ? ' · ' + T('{0} XP', crInfo(m.cr).xp) : '') + (m.baseCr && m.baseCr !== m.cr ? ' · <small>' + T('in D&D: {0}', crShort(m.baseCr)) + '</small>' : '') + '</p>' : '') +
       '<p><b>' + T('AC') + '</b> ' + m.ac + ' · <b>' + T('HP') + '</b> ' + m.hp + ' · <b>' + T('Speed') + '</b> ' + esc(m.speed || '30 ft') + '</p>' +
       '<div class="abline">' + D.ABIL.map(a => '<span><b>' + AB(a) + '</b> ' + m.abil[a] + ' (' + sign(E.modOf(m.abil[a])) + ')</span>').join('') + '</div>' +
       '<h4>' + T('Attacks') + (m.multi ? ' — ' + T('{0} per turn', m.multi) : '') + '</h4><ul>' + m.attacks.map(a => '<li><b>' + esc(a.n) + '</b>: ' + T('{0} to hit', sign(Number(a.hit))) + ', ' + esc(a.d) + ' ' + esc(t(a.t)) + ' (≈' + Math.round(U.avgExpr(a.d)) + ')' + (a.plus ? ' + ' + esc(a.plus.d) + ' ' + esc(t(a.plus.t)) : '') + (a.range ? ' (' + esc(a.range) + ')' : '') + '</li>').join('') + '</ul>' +
@@ -9284,7 +9294,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
         '<p>' + summary + '</p><div class="diffline ' + df.cls + '">' + T('Difficulty') + ' ' + ib('difficulty') + ': ' + df.txt + '</div>' + (en.notes && !editing ? '<p class="traits">' + esc(en.notes) + '</p>' : '');
       if (editing) {
         card += '<label class="blk">' + T('Name') + '<input data-on="encSet" data-id="' + en.id + '" data-f="name" value="' + esc(en.name || '') + '"></label>' +
-          '<label class="blk">' + T('Notes (map, tactics, loot)') + '<textarea data-on="encSet" data-id="' + en.id + '" data-f="notes" placeholder="' + esc(T('Map: Practice cave. Goblin flees at 5 HP. Loot: Gravemaw.')) + '">' + esc(en.notes || '') + '</textarea></label>' +
+          '<label class="blk">' + T('Notes (map, tactics, loot)') + '<textarea data-on="encSet" data-id="' + en.id + '" data-f="notes">' + esc(en.notes || '') + '</textarea></label>' +
           '<h4>' + T('Monsters') + '</h4>' + U.monFilterBar(mons) +
           (en.monsters || []).map((x, i) => '<div class="fxrow">' + monSelect('encm-' + en.id + '-' + i, mons, '', x.mid, ' data-on="encMon" data-id="' + en.id + '" data-i="' + i + '" data-f="mid"') +
             '<label class="inl">× <input type="number" min="1" class="tiny" data-on="encMon" data-id="' + en.id + '" data-i="' + i + '" data-f="qty" value="' + (x.qty || 1) + '"></label><button class="mini danger" data-act="encMonDel" data-id="' + en.id + '" data-i="' + i + '">✕</button></div>').join('') +
@@ -9389,12 +9399,6 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       S.encounters.push({ id: E.uid(), name, notes: '', monsters: Object.keys(counts).map(mid => ({ mid, qty: counts[mid] })) });
       U.saveEncounters(); U.toast(T('Saved in 📋 Prepared fights.'));
     },
-    cbPractice: () => {
-      let bran = S.chars.find(c => c.name === 'Bran Ashford');
-      if (!bran) { U.ACT.loadSample(); bran = S.chars.find(c => c.name === 'Bran Ashford'); }
-      addPc(bran.id); addMon(monById('srd:goblin'), 1); addMon(monById('srd:giantrat'), 1); U.saveCombat(); U.render(); U.toast(T('Practice fight ready. Click “Roll initiative”.'));
-    },
-
     // monsters
     monNewOpen: () => { S.monSel = '__new'; S.newMon = null; U.render(); },
     monCreate: () => {
@@ -9409,10 +9413,24 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     },
     monBalance: ds => { const m = myMon(ds.id); const cr = document.getElementById('balCr').value; balance(m, cr); commitMon(); U.toast(T('Balanced to CR {0}.', cr)); },
     monSel: ds => { S.monSel = ds.id || null; S.monPrevCr = null; U.render(); },
-    mfReset: () => { S.mf = { q: '', from: '', to: '', type: '', src: '' }; U.render(); },
+    mfReset: () => { S.mf = { q: '', from: '', to: '', type: '', src: '', side: '', who: '' }; U.render(); },
     monCopy: ds => { const src0 = monById(ds.id); const src = src0.builtin ? atCr(src0, S.monPrevCr) : src0; const m = normMon(E.clone(src)); m.id = E.uid(); delete m.builtin; m.name = src.name + ' ' + T('(mine)'); S.monPrevCr = null; S.monsters.unshift(m); S.monSel = m.id; commitMon(); },
     monDup: ds => { const m = E.clone(myMon(ds.id)); m.id = E.uid(); m.name += ' ' + T('(copy)'); S.monsters.unshift(m); S.monSel = m.id; commitMon(); },
     monDel: ds => { if (!confirm(T('Delete this monster?'))) return; S.monsters = S.monsters.filter(m => m.id !== ds.id); S.monSel = null; commitMon(); },
+    // CR −1 / +1 / +2 … in the workshop preview: abilities stay, the numbers are balanced again
+    monCrStep: ds => { const L = D.CR_LIST.map(String); const i = L.indexOf(String(ds.cr)); if (i < 0) return; S.monPrevCr = L[Math.max(0, Math.min(L.length - 1, i + Number(ds.d)))]; U.render(); },
+    // the same for a monster already in the fight: keeps the share of HP it has lost and the uses of its abilities
+    cbCrStep: ds => {
+      const x = S.combat.list.find(c => c.id === ds.id); if (!x) return;
+      const L = D.CR_LIST.map(String); const i = L.indexOf(String(x.cr)); if (i < 0) return; const cr = L[Math.max(0, Math.min(L.length - 1, i + Number(ds.d)))]; if (cr === String(x.cr)) return;
+      const base = normMon(E.clone(monById(x.srcId) || { name: x.name, cr: x.cr, ac: x.ac, hp: x.hpMax, abil: x.abil, attacks: x.attacks, abilities: x.abilities, multi: x.multi }));
+      balance(base, cr);
+      const share = x.hpMax ? x.hp / x.hpMax : 1;
+      base.abilities.forEach((ab, k) => { if (x.abilities[k]) ab.id = x.abilities[k].id; });
+      x.name = String(x.name).replace(/\s*\[[^\]]*\]/, '') + ' [' + crShort(cr) + ']';
+      Object.assign(x, { cr, ac: base.ac, hpMax: base.hp, hp: Math.max(x.hp > 0 ? 1 : 0, Math.round(base.hp * share)), attacks: base.attacks, abilities: base.abilities, abil: base.abil });
+      U.saveCombat(); U.toast('⚖️ ' + esc(x.name) + ': ' + crShort(cr)); U.render();
+    },
     monToFight: ds => { const m0 = monById(ds.id); addMon(m0.builtin ? atCr(m0, S.monPrevCr) : m0, 1); U.saveCombat(); U.toast(T('Added to the fight.')); },
     monToScene: ds => { const m0 = monById(ds.id); if (U.obrToScene) U.obrToScene(m0.builtin ? atCr(m0, S.monPrevCr) : m0, 1); },
     cbToScene: () => { const id = document.getElementById('monSel').value; if (!id) { U.toast(T('Choose a monster first.')); return; } const q = Math.max(1, Math.min(20, Number(document.getElementById('monQty').value) || 1)); const cr = (document.getElementById('monCr') || {}).value || ''; if (U.obrToScene) U.obrToScene(atCr(monById(id), cr), q); },
@@ -9914,13 +9932,17 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
 
   // ---------- shops ----------
   // DM shops live in the game (S.shops). Players keep the shops they imported (also S.shops).
-  // The active scenario can bring its own shop (read only).
-  function scenarioShop() {
-    const p = SCN.active; if (!p || !p.shop || !p.shop.items) return null;
-    const items = p.shop.items.map(x => { const e = D.catalogById(x.id) || D.catalogById('s:' + p.id + ':' + x.id); return e ? Object.assign(U.entrySnap(e, x), { price: x.price != null ? x.price : priceOf(e, x.magicBonus), qty: x.qty == null ? -1 : x.qty }) : null; }).filter(Boolean);
-    return { id: 'scn:' + p.id, name: (Array.isArray(p.shop.ru) && U.LANG === 'ru' ? p.shop.ru[0] : p.shop.name) || p.title, desc: p.shop.desc || '', items, fromScenario: true };
+  // The active scenario can bring its own shops (read only): "shop" (one) and/or "shops" (a list).
+  function scenarioShops() {
+    const p = SCN.active; if (!p) return [];
+    const list = (p.shop && p.shop.items ? [p.shop] : []).concat(Array.isArray(p.shops) ? p.shops.filter(s => s && s.items) : []);
+    return list.map((sh, n) => {
+      const items = sh.items.map(x => { const e = D.catalogById(x.id) || D.catalogById('s:' + p.id + ':' + x.id); return e ? Object.assign(U.entrySnap(e, x), { price: x.price != null ? x.price : priceOf(e, x.magicBonus), qty: x.qty == null ? -1 : x.qty }) : null; }).filter(Boolean);
+      const ru = U.LANG === 'ru';
+      return { id: 'scn:' + p.id + (sh.id ? ':' + sh.id : n ? ':' + n : ''), name: (Array.isArray(sh.ru) && ru ? sh.ru[0] : sh.name) || p.title, desc: (Array.isArray(sh.ru) && ru && sh.ru[1]) || sh.desc || '', items, fromScenario: true };
+    });
   }
-  const allShops = () => { const sc = scenarioShop(); return (sc ? [sc] : []).concat(S.shops); };
+  const allShops = () => scenarioShops().concat(S.shops);
   const shopById = id => allShops().find(s => s.id === id);
   U.allShops = allShops; // online.js sends them to the players
 

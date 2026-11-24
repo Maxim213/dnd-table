@@ -1207,5 +1207,15 @@ window.DND_RU.UI = {
   'no answer — the app rolled': 'не ответил — бросило приложение', 'rolled by the player': 'бросил игрок', 'the player rolls it himself…': 'игрок бросает сам…',
   'the target is {0}': 'цель: {0}', 'you are {0}': 'ты: {0}', '{0} may cast Shield (+5 AC) — waiting for the player…': '{0} может наложить Щит (+5 КД) — ждём игрока…',
   'On the map: pick the ⚔️ D&D tool in the Owlbear toolbar (key Y). Click a token or an empty spot — the window shows what you can do there. Drag your token — a ruler shows your movement.': 'На карте: выбери инструмент ⚔️ D&D в панели инструментов Owlbear (клавиша Y). Кликни по токену или пустому месту — окно покажет, что там можно сделать. Тяни свой токен — линейка покажет движение.',
-  'the next attack roll or check of this ally (before your next turn) has Advantage.': 'следующая атака или проверка этого союзника (до твоего следующего хода) — с преимуществом.'
+  'the next attack roll or check of this ally (before your next turn) has Advantage.': 'следующая атака или проверка этого союзника (до твоего следующего хода) — с преимуществом.',
+  'Campaign scenes': 'Сцены кампании',
+  'Nobody yet. Use 🗺 Onto the scene on a monster or character card.': 'Пока никого. Нажми 🗺 На сцену на карточке монстра или персонажа.',
+  'Put its token on the Owlbear scene, hidden. Right click → Show to reveal it.': 'Поставить токен на сцену спрятанным. Правый клик → Show, чтобы показать игрокам.',
+  'Reading the campaign folder…': 'Читаю папку кампании…',
+  'Import errors:': 'Ошибки импорта:',
+  'Choose the Last Kingdom Owlbear_Pack folder to import its maps, encounters and campaign content.': 'Выбери папку Last Kingdom → Owlbear_Pack: загрузятся карты, подготовленные бои и содержимое кампании.',
+  'Then choose the destination in Owlbear and click Upload scenes. Open the imported scene from Assets → Scenes.': 'Затем выбери папку назначения в Owlbear и нажми Upload scenes. Загруженную сцену открой в Assets → Scenes.',
+  'Scenario «{0}»: import incomplete.': 'Сценарий «{0}»: импорт завершён не полностью.',
+  'The map image is empty.': 'Файл карты пуст.',
+  '<p>No one in the fight yet.</p><p>Add characters and monsters above, or start a <b>📋 Prepared fight</b>.</p>': '<p>В бою пока никого.</p><p>Добавь персонажей и монстров выше или запусти <b>📋 Готовый бой</b>.</p>'
 };

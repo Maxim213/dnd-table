@@ -31,7 +31,7 @@
     const head = U.PLAYER
       ? '<h1>' + T('My characters') + '</h1><div class="btnrow"><button class="primary" data-act="newChar">' + T('＋ New character') + '</button><button data-act="importChar">' + T('📥 Import file from DM') + '</button></div>'
       : '<h1>' + T('Characters') + '</h1><div class="btnrow"><button class="primary" data-act="newChar">' + T('＋ New character') + '</button><button data-act="importChar">' + T('📥 Import file(s)') + '</button>' +
-        '<button data-act="loadSample">' + T('Load practice hero (Bran)') + '</button><button data-act="backup">' + T('💾 Save game file') + '</button></div>';
+        '<button data-act="backup">' + T('💾 Save game file') + '</button></div>';
     const tip = U.PLAYER
       ? '<div class="tipbox">' + T('<b>How it works:</b> 1) Create your character. 2) Click <b>📤 Send to DM</b> and send the file on Discord. 3) When the DM sends you an updated file (level up, new items), click <b>📥 Import file from DM</b>.<br>💾 Your character is saved automatically in this browser on this computer. The exported file is your backup.') + '</div>'
       : '<div class="tipbox">' + T('<b>Saving:</b> everything in this game saves automatically in this browser. At the end of an evening click <b>💾 Save game file</b> and keep the file in <code>Campaigns/{0}/</code>. Your other games: the <b>🎲</b> button at the top.', esc(U.fileName(U.game ? U.game.name : 'game'))) + '<br>' +
@@ -396,7 +396,7 @@
     const ta = (k, label, ph) => '<label class="blk">' + label + '<textarea data-on="bind" data-path="details.' + k + '" placeholder="' + esc(ph) + '">' + esc(c.details[k] || '') + '</textarea></label>';
     return '<h2>' + T('9. Name & story') + '</h2><p class="lead">' + T('Give your hero a name and three short lines. That\'s enough to start roleplaying!') + '</p>' +
       '<div class="detail row2"><div>' +
-      '<label class="blk">' + T('Character name') + '<input data-on="bind" data-path="name" value="' + esc(c.name) + '" placeholder="' + esc(T('e.g. Bran Ashford')) + '"></label>' +
+      '<label class="blk">' + T('Character name') + '<input data-on="bind" data-path="name" value="' + esc(c.name) + '"></label>' +
       '<label class="blk">' + T('Portrait (any picture — e.g. made in ChatGPT)') + '</label><div class="portraitrow">' + U.portrait(c, E.compute(c), 'md') + '<div><button data-act="pickPortrait">' + T('Upload picture…') + '</button>' + (c.portrait ? ' <button class="danger" data-act="clearPortrait">' + T('Remove') + '</button>' : '') + '</div></div>' +
       '</div><div>' + ta('who', T('Who are you, in one sentence?'), T('An ex-soldier who…')) + ta('want', T('What do you want?'), T('Revenge, gold, to find my sister…')) + ta('flaw', T('Flaw or fear'), T('Charges in first, thinks later')) + ta('secret', T('A secret (only the DM will know)'), '') + '</div></div>' +
       '<div class="detail">' + ta('appearance', T('What do you look like?'), T('Tall, scar over the left eye…')) + ta('backstory', T('Backstory (optional)'), '') + '</div>';
@@ -452,10 +452,6 @@
 
   Object.assign(U.ACT, {
     newChar: () => { const c = E.newChar(); S.chars.push(c); S.charId = c.id; S.step = 0; U.saveChars(); U.go('builder'); },
-    loadSample: () => {
-      D.SAMPLE_CHARACTERS.forEach(s => { const c = E.normalize(E.clone(s)); c.id = E.uid(); S.chars.push(c); });
-      U.saveChars(); U.render(); U.toast(T('Bran added — open his sheet!'));
-    },
     openSheet: ds => { const c = U.byId(ds.id); if (c && c.lvlUp && S.view === 'builder') { U.go('levelup', ds.id); return; } U.go('sheet', ds.id); },
     openBuilder: ds => { S.step = 0; U.go('builder', ds.id); },
     toggleParty: ds => { const c = U.byId(ds.id); c.party = !c.party; U.commit(); },

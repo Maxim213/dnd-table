@@ -1,10 +1,5 @@
-// 🗺 Scenes for Owlbear (the DM, online only — index.html loads it after online.js).
-//  • a battle-map maker: cave / dungeon / forest, drawn in the browser from a number ("seed": the same number = the same map)
-//  • puts the monsters of a prepared fight on it (HIDDEN, in the far part of the map), the party's heroes at the entrance,
-//    fog over everything (you reveal it), walls along the rock (Owlbear's dynamic fog can use them) — and uploads it into
-//    your Owlbear as a new scene (Owlbear → Scenes). Token pictures: assets/tokens/*.png (made by _dev/make_tokens.ps1).
-//  • 📁 a scenario folder: scenario.json + map pictures → monsters, prepared fights and scenes in one go (format: README)
-//  • 🧙 the party's tokens onto the scene that is open now
+// 🗺 Campaign scenes for Owlbear (DM, online only).
+// Import a campaign folder with maps, encounters and tokens. The generator below supports older saved packs.
 (function (U) {
   if (!U || !window.ONLINE || !window.ONLINE.owlbear) return;
   const T = U.T, S = U.S, D = U.D, E = U.E, esc = U.esc;
@@ -220,7 +215,11 @@
   // o: { name, mapBlob, cellPx, W, H, tokens: [{ name, key, x, y, hidden }], walls: [[x1, y1, x2, y2]…] (squares), fog }
   const safeName = n => String(n || '').replace(/[^\p{L}\p{N} .,'()-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Scene';
   async function stdImage(blob, type) { // webp / anything else → JPEG (maps) or PNG (tokens, keeps transparency)
-    if (!blob || /^image\/(png|jpeg)$/.test(blob.type)) return blob;
+    if (!blob) throw new Error(T('The map image is empty.'));
+    // Files selected from disk must be copied before postMessage to Owlbear's frame.
+    // https://docs.owlbear.rodeo/extensions/apis/assets/#uploadscenes
+    blob = new Blob([await blob.arrayBuffer()], { type: blob.type });
+    if (/^image\/(png|jpeg)$/.test(blob.type)) return blob;
     const url = URL.createObjectURL(blob); try { const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       return await new Promise(ok => c.toBlob(ok, type === 'png' ? 'image/png' : 'image/jpeg', 0.9)); } catch (e) { return blob; } finally { URL.revokeObjectURL(url); }
@@ -234,11 +233,6 @@
     catch (e) { console.warn('all scenes without walls', e); }
     let n = 0; for (let i = 0; i < list.length; i += 10) { await OBR.assets.uploadScenes(list.slice(i, i + 10).map(x => x.plain)); n += Math.min(10, list.length - i); } // too big at once → by ten
     return n;
-  }
-  async function upload(o, show) {
-    const sc = await buildScene(o); const hide = show === false;
-    try { await OBR.assets.uploadScenes([sc.full], hide); return sc.walls ? 'full' : 'ok'; }
-    catch (e) { if (!sc.walls) throw e; console.warn('scene with walls / lights', e); await OBR.assets.uploadScenes([sc.plain], hide); return 'plain'; }
   }
   async function buildScene(o) {
     const b = B(); if (!b || !b.buildSceneUpload || !OBR || !OBR.assets) throw new Error(T('Owlbear does not allow uploads here.'));
@@ -255,46 +249,14 @@
     const mk = full => b.buildSceneUpload().name(safeName(o.name)).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(false).items(items.concat(full ? extra : [])).build();
     return { full: mk(true), plain: mk(false), walls: extra.length };
   }
-  // the monsters of a prepared fight → { name, key } × qty
+  const party = () => (S.chars || []).filter(c => c.party !== false).slice(0, 8);
+  // Older packs can still place a prepared encounter on a generated map.
   function encTokens(enc) {
     const out = [];
     ((enc && enc.monsters) || []).forEach(x => { const m = U.monById ? U.monById(x.mid) : null; if (!m) return; for (let i = 0; i < (Number(x.qty) || 1); i++) out.push({ name: m.name, key: monToken(m) }); });
     return out;
   }
-  const party = () => (S.chars || []).filter(c => c.party !== false).slice(0, 8);
 
-  // ---------- the window ----------
-  // ---------- tokens: onto the open scene, and into Owlbear's own library (Characters) to drag them from there ----------
-  async function blobOf(url) { return await (await fetch(url)).blob(); }
-  // a hero's small round avatar (his portrait in a gold ring, ~10 KB); no portrait → the class picture
-  async function heroAvatar(c) {
-    const own = c.token || customOf(c.name); if (own) { await sized([own]); return { blob: await blobOf(tokURL(own)), px: Math.max(...(SIZE[own] || [256, 256])) }; } // a picked token picture wins
-    const src = c.portraitThumb || (String(c.portrait || '').startsWith('data:') && c.portrait.length < 60000 ? c.portrait : '');
-    if (!src) return { blob: await blobOf(tokURL(heroToken(c))), px: 256 };
-    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = src; });
-    const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s; const x = cv.getContext('2d');
-    x.save(); x.beginPath(); x.arc(s / 2, s / 2, s / 2 - 6, 0, 7); x.clip(); const r = Math.min(img.width, img.height); x.drawImage(img, (img.width - r) / 2, (img.height - r) / 2, r, r, 0, 0, s, s); x.restore();
-    x.lineWidth = 7; x.strokeStyle = '#7fb3ff'; x.beginPath(); x.arc(s / 2, s / 2, s / 2 - 4, 0, 7); x.stroke();
-    return { blob: await new Promise(ok => cv.toBlob(ok, 'image/png')), px: 128 };
-  }
-  // every monster the DM may need: the fight now + all prepared fights (one of each kind)
-  function allMonsters() {
-    const seen = {}, out = [];
-    ((S.combat && S.combat.list) || []).filter(x => x.type === 'mon').forEach(x => { const k = 'e:' + x.id; if (!seen[k]) { seen[k] = 1; out.push({ name: x.name, key: monToken(x), fight: true }); } });
-    S.encounters.forEach(en => (en.monsters || []).forEach(x => { const m = U.monById ? U.monById(x.mid) : null; if (m && !seen['m:' + m.id]) { seen['m:' + m.id] = 1; out.push({ name: m.name, key: monToken(m), mid: m.id }); } }));
-    return out;
-  }
-  const libDone = () => { try { return JSON.parse(localStorage.getItem('dnd.obrLib') || '{}'); } catch (e) { return {}; } };
-  async function toLibrary(heroes, mons, force) {
-    const b = B(); if (!b || !b.buildImageUpload || !OBR.assets || !OBR.assets.uploadImages) throw new Error(T('Owlbear does not allow uploads here.'));
-    const done = libDone(); const imgs = [];
-    for (const c of heroes) { const k = 'h:' + c.id; if (done[k] && !force) continue; const a = await heroAvatar(c); imgs.push(b.buildImageUpload(await stdImage(a.blob, 'png')).dpi(a.px).name(safeName(c.name)).build()); done[k] = 1; }
-    await sized(mons.map(m => m.key));
-    for (const m of mons) { const k = 'm:' + m.name; if (done[k] && !force) continue; imgs.push(b.buildImageUpload(await stdImage(await blobOf(tokURL(m.key)), 'png')).dpi(Math.max(...(SIZE[m.key] || [256, 256]))).name(safeName(m.name)).build()); done[k] = 1; }
-    if (imgs.length) await OBR.assets.uploadImages(imgs, 'CHARACTER');
-    try { localStorage.setItem('dnd.obrLib', JSON.stringify(done)); } catch (e) {}
-    return imgs.length;
-  }
   // put tokens next to the middle of the screen of the scene that is open now
   async function toScene(list) {
     const w = await OBR.viewport.getWidth(), h = await OBR.viewport.getHeight(), s = await OBR.viewport.getScale(), p = await OBR.viewport.getPosition();
@@ -345,7 +307,7 @@
     return '<div class="scenebox"><p><b>🗺 ' + T('On the Owlbear scene now') + ' (' + sceneToks.length + '):</b> ' +
       (sceneToks.length ? sceneToks.map(t => '<span class="chip small' + (t.visible ? '' : ' dim') + '">' + (t.link && t.link.k === 'pc' ? '🧙 ' : '👹 ') + esc(t.name) + (t.visible ? '' : ' 🙈') + (inFight(t) ? ' ⚔️' : '') +
         ' <button class="x" data-act="scVis" data-id="' + esc(t.id) + '" title="' + esc(t.visible ? T('Hide from the players') : T('Show to the players')) + '">' + (t.visible ? '🙈' : '👁') + '</button><button class="x" data-act="scDel" data-id="' + esc(t.id) + '" title="' + esc(T('Remove from the scene')) + '">✕</button></span>').join(' ')
-        : '<small>' + T('Nobody yet. Put monsters with 🗺 Onto the scene, heroes with 🗺 in the top bar.') + '</small>') + '</p>' +
+        : '<small>' + T('Nobody yet. Use 🗺 Onto the scene on a monster or character card.') + '</small>') + '</p>' +
       (sceneToks.length ? '<p><button class="primary" data-act="cbFromScene">⚔️ ' + T('Fight with everyone on the scene') + '</button> <small class="hint">' + T('heroes and monsters on the scene (hidden too) go into the fight, initiative is rolled') + '</small></p>' : '') + '</div>';
   };
   U.ACT.scVis = async ds => { try { await OBR.scene.items.updateItems([ds.id], L => { L.forEach(x => { x.visible = !(x.visible !== false); }); }); readSoon(); } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); } };
@@ -379,109 +341,19 @@
     readSoon();
   };
 
-  // ---------- ready-made maps (all big). Dungeons come dark: fog + walls + light on the heroes (Owlbear's dynamic fog) ----------
-  const MAPS = [
-    { id: 'd1', type: 'dungeon', seed: 311, en: 'Crypt of the Forgotten King', ru: 'Склеп забытого короля' },
-    { id: 'd2', type: 'dungeon', seed: 1777, en: 'Cellars of the Old Fortress', ru: 'Подвалы старой крепости' },
-    { id: 'd3', type: 'dungeon', seed: 4242, en: 'The Cultists\' Den', ru: 'Логово культистов' },
-    { id: 'd4', type: 'dungeon', seed: 905, en: 'Flooded Catacombs', ru: 'Затопленные катакомбы' },
-    { id: 'f1', type: 'forest', seed: 77, en: 'Path through the Black Wood', ru: 'Тропа через Чёрный лес' },
-    { id: 'f2', type: 'forest', seed: 2024, en: 'Bandits\' Glade', ru: 'Поляна разбойников', opts: { clearing: true, dense: true } },
-    { id: 'f3', type: 'forest', seed: 533, en: 'Edge of the Old Oak', ru: 'Опушка у старого дуба', opts: { oak: true, noPath: true } },
-    { id: 'f4', type: 'forest', seed: 6100, en: 'Wolf Thicket', ru: 'Волчья чаща', opts: { dense: true, noPath: true } }
-  ];
-  const mapName = m => (U.LANG === 'ru' ? m.ru : m.en);
-  const ST = { map: 'd1', heroes: true, hide: true, dark: true };
-  const made = {};
-  const mapOf = m => made[m.id] || (made[m.id] = U.makeMap(m.type, 'l', m.seed, 80, m.opts));
-  function preview() {
-    const m = MAPS.find(x => x.id === ST.map) || MAPS[0]; const map = mapOf(m);
-    const pv = document.getElementById('scPrev'); if (!pv) return;
-    const c = pv.getContext('2d'); const k = pv.width / map.canvas.width; pv.height = Math.round(map.canvas.height * k);
-    c.drawImage(map.canvas, 0, 0, pv.width, pv.height); const P = 80 * k;
-    if (ST.heroes) map.heroSpots(party().length).forEach(([x, y]) => { c.fillStyle = 'rgba(60,120,230,.9)'; c.beginPath(); c.arc((x + 0.5) * P, (y + 0.5) * P, P * 0.42, 0, 7); c.fill(); });
-  }
+  // ---------- campaign scene import ----------
+  const ST = { hide: true };
   function scenesPop() {
     const pop = document.getElementById('pop'); if (!pop) return;
-    const cur = MAPS.find(x => x.id === ST.map) || MAPS[0];
-    const btn = m => '<button class="mini' + (ST.map === m.id ? ' on' : '') + '" data-act="scMap" data-v="' + m.id + '">' + (m.type === 'dungeon' ? '🏰 ' : '🌲 ') + esc(mapName(m)) + '</button>';
-    pop.innerHTML = '<div class="popcard settings scenes" role="dialog"><div class="ph"><h2>🗺 ' + T('Scenes for Owlbear') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
-      '<p><b>🏰 ' + T('Dungeons') + ':</b> ' + MAPS.filter(m => m.type === 'dungeon').map(btn).join(' ') + '</p>' +
-      '<p><b>🌲 ' + T('Forests') + ':</b> ' + MAPS.filter(m => m.type === 'forest').map(btn).join(' ') + '</p>' +
-      '<canvas id="scPrev" width="520" height="360" style="width:100%;border-radius:8px;border:1px solid #5a4630;background:#111"></canvas>' +
-      '<p><label class="inl"><input type="checkbox" data-on="scHeroes"' + (ST.heroes ? ' checked' : '') + '> 🧙 ' + T('the party\'s heroes at the entrance') + ' 🔵</label> ' +
-      '<label class="inl"><input type="checkbox" data-on="scDark"' + (ST.dark ? ' checked' : '') + '> 🌑 ' + T('dungeons start dark (else dusk)') + '</label></p>' +
-      '<p class="hint">' + T('Dungeons come with walls and vision: the players see only what their heroes see (walls block it; in the dark — a torch or darkvision). You see everything. Change the light any time with 🔦 in the top bar.') + '</p>' +
-      '<p class="btnrow"><button class="primary" data-act="scUpload">📦 ' + T('Upload «{0}»', esc(mapName(cur))) + '</button> <button data-act="scAllMaps">📦📦 ' + T('Import all maps') + '</button> <button data-act="scFolder">📁 ' + T('Scenario from a folder…') + '</button></p>' +
-      '<p class="hint" id="scMsg"></p>' + tokenList() + '</div>';
-    pop.classList.add('show'); setTimeout(preview, 30);
+    pop.innerHTML = '<div class="popcard settings scenes" role="dialog"><div class="ph"><h2>🗺 ' + T('Campaign scenes') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
+      '<p>' + T('Choose the Last Kingdom Owlbear_Pack folder to import its maps, encounters and campaign content.') + '</p>' +
+      '<p class="btnrow"><button class="primary" data-act="scFolder">📁 ' + T('Scenario from a folder…') + '</button></p>' +
+      '<p class="hint">' + T('Then choose the destination in Owlbear and click Upload scenes. Open the imported scene from Assets → Scenes.') + '</p>' +
+      '<div id="scMsg" role="status" aria-live="polite"></div></div>';
+    pop.classList.add('show');
   }
-  // 🧩 the token list at the bottom of the window: ➕ puts one on the open scene
-  function tokenList() {
-    const P = party(), M = allMonsters();
-    const row = (label, data) => '<button class="mini" ' + data + '>➕ ' + esc(label) + '</button>';
-    return '<h3>🧩 ' + T('Tokens onto the open scene') + '</h3>' +
-      '<p><b>🧙 ' + T('Heroes') + ':</b> ' + (P.length ? P.map(c => row(c.name, 'data-act="scTok" data-k="h" data-id="' + esc(c.id) + '"')).join(' ') + ' ' + row(T('all heroes'), 'data-act="scTok" data-k="hall"') : '<small>' + T('No heroes in the party yet.') + '</small>') + '</p>' +
-      '<p><b>👹 ' + T('Monsters') + ':</b> ' + (M.length ? M.map((m, i) => row(m.name + (m.fight ? ' ⚔️' : ''), 'data-act="scTok" data-k="m" data-i="' + i + '"')).join(' ') : '') +
-      ' <small>' + T('Any monster: ⚔️ Combat → choose it → 🗺 Onto the scene.') + '</small></p>' +
-      '<p><label class="inl"><input type="checkbox" data-on="scHide"' + (ST.hide ? ' checked' : '') + '> 🙈 ' + T('put monsters hidden (right click → Show when they appear)') + '</label></p>' +
-      '<p class="btnrow"><button data-act="scLib">📚 ' + T('All heroes and monsters into Owlbear\'s library') + '</button></p>';
-  }
-  U.ON.scHide = el => { ST.hide = el.checked; };
-  U.ON.scDark = el => { ST.dark = el.checked; };
-  U.ACT.scTok = async ds => {
-    try {
-      let list = [];
-      if (ds.k === 'hall') list = party().map(c => ({ name: c.name, key: heroToken(c) }));
-      else if (ds.k === 'h') { const c = U.byId(ds.id); if (c) list = [{ name: c.name, key: heroToken(c) }]; }
-      else { const m = allMonsters()[Number(ds.i)]; if (m) list = [{ name: m.name, key: m.key, hidden: ST.hide, meta: m.mid ? { 'dndtable/mon': { mid: m.mid } } : {} }]; }
-      const n = await toScene(list); msg('✅ ' + T('On the scene: {0}. They link to the fight by their names.', n)); readSoon();
-    } catch (e) { msg('⚠️ ' + esc(e.message || e)); }
-  };
-  U.ACT.scLib = async () => {
-    try { msg('⏳ ' + T('Uploading…')); const n = await toLibrary(party(), allMonsters(), true); msg('✅ ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); }
-    catch (e) { msg('⚠️ ' + esc(e.message || e)); console.warn(e); }
-  };
   const msg = h => { const m = document.getElementById('scMsg'); if (m) m.innerHTML = h; };
   U.ACT.scenes = () => scenesPop();
-  U.ACT.scMap = ds => { ST.map = ds.v; scenesPop(); };
-  U.ON.scHeroes = el => { ST.heroes = el.checked; preview(); };
-  async function uploadMap(m) {
-    const map = mapOf(m); const dun = m.type === 'dungeon'; const dark = dun && ST.dark; // walls + lights always (harmless), the fog only when asked
-    const tokens = [];
-    if (ST.heroes) { const hs = map.heroSpots(party().length); party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false, light: dun }); }); }
-    const blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9));
-    return upload({ name: mapName(m), mapBlob: blob, cellPx: map.P, tokens, walls: dun ? map.walls : [], vision: dun ? (ST.dark ? 'dark' : 'dusk') : '' });
-  }
-  U.ACT.scUpload = async () => {
-    const m = MAPS.find(x => x.id === ST.map) || MAPS[0];
-    try {
-      msg('⏳ ' + T('Uploading…')); const r = await uploadMap(m);
-      let n = 0; try { n = await toLibrary(party(), allMonsters(), false); } catch (e) {}
-      msg('✅ ' + T('Done! Owlbear → Scenes (top left) → open «{0}».', esc(mapName(m))) + (r === 'plain' ? ' ' + T('(Owlbear did not take the walls / lights — the scene is without them.)') : '') + (n ? '<br>📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n) : ''));
-    } catch (e) { msg('⚠️ ' + esc(e.message || e)); console.warn(e); }
-  };
-  U.ACT.scAllMaps = async () => {
-    const done = [];
-    try {
-      for (const m of MAPS) { msg('⏳ ' + T('Uploading…') + ' ' + (done.length + 1) + ' / ' + MAPS.length + ' — ' + esc(mapName(m))); await uploadMap(m); done.push(mapName(m)); }
-      let n = 0; try { n = await toLibrary(party(), allMonsters(), false); } catch (e) {}
-      msg('✅ ' + T('{0} scenes are in Owlbear → Scenes (top left).', done.length) + '<br>' + done.map(esc).join(' · ') + (n ? '<br>📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n) : ''));
-    } catch (e) { msg('⚠️ ' + esc(e.message || e) + (done.length ? '<br>' + T('Uploaded before the error: {0}', done.map(esc).join(', ')) : '')); console.warn(e); }
-  };
-  // the party onto the scene that is open now (next to the middle of the screen)
-  U.ACT.scHeroes = async () => {
-    try {
-      const list = party(); if (!list.length) { msg(T('No heroes in the party yet.')); return; }
-      const have = new Set((await OBR.scene.items.getItems(it => it.layer === 'CHARACTER')).map(it => String(it.name || '').trim().toLowerCase()));
-      const w = await OBR.viewport.getWidth(), h = await OBR.viewport.getHeight(), s = await OBR.viewport.getScale(), p = await OBR.viewport.getPosition();
-      const cx = Math.floor(((w / 2 - p.x) / s) / GD), cy = Math.floor(((h / 2 - p.y) / s) / GD);
-      await sized(list.map(heroToken));
-      const add = list.filter(c => !have.has(String(c.name || '').trim().toLowerCase())).map((c, i) => tokenItem(c.name, heroToken(c), cx + (i % 4), cy + Math.floor(i / 4), false));
-      if (!add.length) { msg(T('All heroes are already on the scene.')); return; }
-      await OBR.scene.items.addItems(add); msg('✅ ' + T('{0} heroes put on the scene. Each player can now move only his own.', add.length));
-    } catch (e) { msg('⚠️ ' + esc(e.message || e)); }
-  };
 
   // ---------- 📁 a scenario folder ----------
   // scenario.json: { name, monsters: [my monsters, the app's format], encounters: [{ name, monsters: [{ mid | name, qty }] }],
@@ -489,9 +361,12 @@
   //              encounter: "a fight's name", heroes: true, fog: true, walls: true, tokens: [{ name, token, x, y, hidden }] }] }
   U.ACT.scFolder = () => {
     const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.setAttribute('webkitdirectory', ''); inp.style.display = 'none';
-    inp.onchange = () => importFolder([...inp.files]).catch(e => { msg('⚠️ ' + esc(e.message || e)); console.warn(e); }); document.body.appendChild(inp); inp.click(); setTimeout(() => inp.remove(), 60000);
+    inp.onchange = () => { const files = [...inp.files]; inp.remove(); if (files.length) importFolder(files).catch(e => { const h = '⚠️ ' + esc(e.message || e); msg(h); U.toast(h); console.warn(e); }); };
+    inp.oncancel = () => inp.remove();
+    document.body.appendChild(inp); inp.click();
   };
   async function importFolder(files) {
+    msg('⏳ ' + T('Reading the campaign folder…'));
     const byPath = {}; files.forEach(f => { const p = (f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name; byPath[p.toLowerCase()] = f; byPath[f.name.toLowerCase()] = byPath[f.name.toLowerCase()] || f; });
     const jf = byPath['scenario.json'] || files.find(f => /scenario\.json$/i.test(f.name)); if (!jf) throw new Error(T('No scenario.json in this folder.'));
     const sc = JSON.parse(await jf.text()); const log = [];
@@ -518,7 +393,7 @@
       try {
       let blob, cellPx, map = null, W = 0, H = 0;
       if (s.map && typeof s.map === 'object') { map = U.makeMap(s.map.gen || 'cave', s.map.size || 'm', s.map.seed || 1, 80); blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9)); cellPx = 80; W = map.W; H = map.H; }
-      else { const f = byPath[String(s.map || '').toLowerCase()] || byPath[String(s.map || '').split('/').pop().toLowerCase()]; if (!f) { log.push('⚠️ ' + T('no picture {0}', esc(s.map))); continue; } blob = f; cellPx = Number(s.cellPx) || 100; }
+      else { const f = byPath[String(s.map || '').toLowerCase()] || byPath[String(s.map || '').split('/').pop().toLowerCase()]; if (!f) throw new Error(T('no picture {0}', s.map)); blob = f; cellPx = Number(s.cellPx) || 100; }
       // tokens: { monster: "srd:goblin" | a name, x, y (square), hidden } — the name comes from the app, so the token links to the fight by itself
       const tokens = (s.tokens || []).map(t => { const m = t.monster ? findMon({ mid: t.monster, name: t.monster }) : null; const name = t.name || (m ? m.name : '?');
         return { name, key: t.token || (m ? monToken(m) : monToken({ name })), x: Number(t.x) || 0, y: Number(t.y) || 0, hidden: t.hidden !== false }; });
@@ -534,15 +409,17 @@
       } catch (e) { console.warn('scene upload', s.name, e); fails.push(esc(s.name || '?') + ': ' + esc((e && (e.message || e.error || JSON.stringify(e))) || e)); }
     }
     if (built.length) { msg('⏳ ' + T('Owlbear asks where to put the scenes: pick a folder (Default is fine) → «Upload scenes». Then wait — {0} maps are uploading.', built.length)); try { nOk = await uploadMany(built); } catch (e) { fails.push(esc((e && (e.message || e.error)) || String(e))); } }
-    if (fails.length) log.unshift('⚠️ ' + T('Owlbear did not take {0} of {1} scenes:', fails.length, scs.length) + '<br>' + fails.slice(0, 8).join('<br>'));
+    if (fails.length) log.unshift('⚠️ ' + T('Import errors:') + '<br>' + fails.slice(0, 8).join('<br>'));
     if (scs.length) log.unshift('🗺 ' + T('Scenes uploaded: {0} of {1}. Owlbear → Scenes (top left).', nOk, scs.length));
-    try { const n = await toLibrary(party(), allMonsters(), false); if (n) log.push('📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); } catch (e) { console.warn(e); }
-    U.render(); scenesPop(); msg('✅ ' + T('Scenario «{0}» loaded:', esc(sc.name || '')) + '<br>' + log.join('<br>'));
+    U.render(); scenesPop();
+    const failed = fails.length > 0 || nOk < scs.length;
+    msg((failed ? '⚠️ ' + T('Scenario «{0}»: import incomplete.', esc(sc.name || '')) : '✅ ' + T('Scenario «{0}» loaded:', esc(sc.name || ''))) + '<br>' + log.join('<br>'));
+    if (failed) U.toast('⚠️ ' + T('Scenes uploaded: {0} of {1}. Owlbear → Scenes (top left).', nOk, scs.length) + '<br>' + fails.slice(0, 3).join('<br>'));
   }
 
   U._importScenario = importFolder; // (tests)
   // the 🗺 button in the DM's top bar
   const top0 = U.renderTop;
-  U.renderTop = function () { top0(); const el = document.getElementById('topCtl'); const ps = el && el.querySelector('[data-act="panelSize"]'); if (el && U.DM) (ps || el).insertAdjacentHTML(ps ? 'beforebegin' : 'beforeend', '<button class="tb" data-act="scenes" title="' + esc(T('Scenes for Owlbear: make a map, put the monsters and heroes, upload')) + '">🗺</button>'); };
+  U.renderTop = function () { top0(); const el = document.getElementById('topCtl'); const ps = el && el.querySelector('[data-act="panelSize"]'); if (el && U.DM) (ps || el).insertAdjacentHTML(ps ? 'beforebegin' : 'beforeend', '<button class="tb" data-act="scenes" title="' + esc(T('Campaign scenes')) + '">🗺</button>'); };
   if (document.getElementById('topCtl')) U.renderTop();
 })(window.UI);

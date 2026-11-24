@@ -226,13 +226,13 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     let h = '<div class="ph"><h1>' + T('Fight') + ' ' + ib('combat') + '</h1><div class="btnrow">' +
       (!live ? '<button class="primary" data-act="cbStart">' + T('▶ Start combat') + '</button><button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button>'
         : '<button class="primary" data-act="cbNext">' + T('Next turn ▶') + '</button><span class="round">' + T('Round') + ' <b>' + cb.round + '</b></span>') + '</div></div>';
-    let setup = '<div class="btnrow">' + (live ? '<button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button>' : '') + '<button data-act="cbSavePrep" title="' + esc(T('Save these monsters as a prepared fight')) + '">' + T('📋 Save as prepared') + '</button><button data-act="cbPractice">' + T('Practice fight') + '</button><button class="danger" data-act="cbClear">' + (live ? T('⏹ End the fight') : T('Clear')) + '</button></div>';
+    let setup = '<div class="btnrow">' + (live ? '<button data-act="cbRollInit">' + T('🎲 Roll initiative') + '</button>' : '') + '<button data-act="cbSavePrep" title="' + esc(T('Save these monsters as a prepared fight')) + '">' + T('📋 Save as prepared') + '</button><button class="danger" data-act="cbClear">' + (live ? T('⏹ End the fight') : T('Clear')) + '</button></div>';
     setup += U.monFilterBar(mons) + '<div class="addrow cbadd">' +
       '<select data-on="cbAddPc"><option value="">' + T('＋ Add character…') + '</option>' + S.chars.filter(c => !list.some(x => x.charId === c.id)).map(c => opt(c.id, c.name || T('Unnamed'), '')).join('') + '</select>' +
       monSelect('monSel', mons, T('Monster…')) +
       '<select id="monCr" title="' + esc(T('Make it stronger or weaker (the numbers balance themselves)')) + '">' + opt('', T('CR as in D&D'), '') + D.CR_LIST.map(cr => opt(cr, crShort(cr) + ' — ' + crHint(cr), '')).join('') + '</select>' +
       '<input id="monQty" type="number" min="1" max="20" value="1" class="tiny" title="' + esc(T('How many')) + '"><button data-act="cbAddMon">' + T('＋ Add') + '</button>' +
-      (U.obrToScene ? '<button data-act="cbToScene" title="' + esc(T('Put its token on the Owlbear scene (hidden or not — see 🗺)')) + '">🗺 ' + T('Onto the scene') + '</button>' : '') +
+      (U.obrToScene ? '<button data-act="cbToScene" title="' + esc(T('Put its token on the Owlbear scene, hidden. Right click → Show to reveal it.')) + '">🗺 ' + T('Onto the scene') + '</button>' : '') +
       '<button data-act="cTab" data-v="monsters">' + T('✎ Make a custom monster') + '</button></div>' + (U.sceneBox ? U.sceneBox() : '');
 
     const monsIn = list.filter(x => x.type === 'mon');
@@ -251,7 +251,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
         '<div class="cbctl"><input type="number" class="tiny" id="amt-' + x.id + '" placeholder="' + esc(T('amt')) + '"><button class="mini dmgb" data-act="cbDmg" data-id="' + x.id + '">' + T('Dmg') + '</button><button class="mini healb" data-act="cbHeal" data-id="' + x.id + '">' + T('Heal') + '</button>' +
         (down ? '<button class="mini" data-act="cbDeath" data-id="' + x.id + '">' + T('Death save') + '</button>' : '') +
         '<button class="mini" data-act="cbTurn" data-i="' + i + '" title="' + esc(T('Make it this creature\'s turn')) + '">▶</button><button class="mini danger" data-act="cbDel" data-id="' + x.id + '">✕</button></div></div>';
-    }).join('') : '<div class="emptybig">' + T('<p>No one in the fight yet.</p><p>Add characters and monsters above, start a <b>📋 Prepared fight</b>, or click <b>Practice fight</b>.</p>') + '</div>') + '</div>';
+    }).join('') : '<div class="emptybig">' + T('<p>No one in the fight yet.</p><p>Add characters and monsters above, or start a <b>📋 Prepared fight</b>.</p>') + '</div>') + '</div>';
 
     h += '<div class="cbactive">';
     if (active && !cbView(active)) h += '<p class="warn">⚠️ ' + T('This hero is not in the game any more — remove the row or press Next turn.') + '</p>';
@@ -407,7 +407,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
         '<p>' + summary + '</p><div class="diffline ' + df.cls + '">' + T('Difficulty') + ' ' + ib('difficulty') + ': ' + df.txt + '</div>' + (en.notes && !editing ? '<p class="traits">' + esc(en.notes) + '</p>' : '');
       if (editing) {
         card += '<label class="blk">' + T('Name') + '<input data-on="encSet" data-id="' + en.id + '" data-f="name" value="' + esc(en.name || '') + '"></label>' +
-          '<label class="blk">' + T('Notes (map, tactics, loot)') + '<textarea data-on="encSet" data-id="' + en.id + '" data-f="notes" placeholder="' + esc(T('Map: Practice cave. Goblin flees at 5 HP. Loot: Gravemaw.')) + '">' + esc(en.notes || '') + '</textarea></label>' +
+          '<label class="blk">' + T('Notes (map, tactics, loot)') + '<textarea data-on="encSet" data-id="' + en.id + '" data-f="notes">' + esc(en.notes || '') + '</textarea></label>' +
           '<h4>' + T('Monsters') + '</h4>' + U.monFilterBar(mons) +
           (en.monsters || []).map((x, i) => '<div class="fxrow">' + monSelect('encm-' + en.id + '-' + i, mons, '', x.mid, ' data-on="encMon" data-id="' + en.id + '" data-i="' + i + '" data-f="mid"') +
             '<label class="inl">× <input type="number" min="1" class="tiny" data-on="encMon" data-id="' + en.id + '" data-i="' + i + '" data-f="qty" value="' + (x.qty || 1) + '"></label><button class="mini danger" data-act="encMonDel" data-id="' + en.id + '" data-i="' + i + '">✕</button></div>').join('') +
@@ -512,12 +512,6 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       S.encounters.push({ id: E.uid(), name, notes: '', monsters: Object.keys(counts).map(mid => ({ mid, qty: counts[mid] })) });
       U.saveEncounters(); U.toast(T('Saved in 📋 Prepared fights.'));
     },
-    cbPractice: () => {
-      let bran = S.chars.find(c => c.name === 'Bran Ashford');
-      if (!bran) { U.ACT.loadSample(); bran = S.chars.find(c => c.name === 'Bran Ashford'); }
-      addPc(bran.id); addMon(monById('srd:goblin'), 1); addMon(monById('srd:giantrat'), 1); U.saveCombat(); U.render(); U.toast(T('Practice fight ready. Click “Roll initiative”.'));
-    },
-
     // monsters
     monNewOpen: () => { S.monSel = '__new'; S.newMon = null; U.render(); },
     monCreate: () => {
