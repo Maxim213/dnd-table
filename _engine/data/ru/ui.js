@@ -1001,6 +1001,8 @@ window.DND_RU.UI = {
   'Bag': 'Инвентарь',
   'Card': 'Карточка',
   'Rolls': 'Броски',
+  'Owlbear did not take {0} of {1} scenes:': 'Owlbear не принял {0} из {1} сцен:',
+  'Scenes uploaded: {0} of {1}. Owlbear → Scenes (top left).': 'Сцен загружено: {0} из {1}. Они в Owlbear → Scenes (слева сверху).',
   'App scenario: {0}': 'Сценарий приложения: {0}',
   'Weaker: CR −1 (abilities stay, numbers change)': 'Слабее: ПО −1 (приёмы остаются, цифры меняются)',
   'Stronger: CR +1 (abilities stay, numbers change)': 'Сильнее: ПО +1 (приёмы остаются, цифры меняются)',

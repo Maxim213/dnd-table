@@ -218,7 +218,7 @@
       .position({ x: (cx + 0.5) * GD, y: (cy + 0.5) * GD }).layer('CHARACTER').name(name).plainText(name).visible(!hidden).locked(false).metadata(meta || {}).build();
   }
   // o: { name, mapBlob, cellPx, W, H, tokens: [{ name, key, x, y, hidden }], walls: [[x1, y1, x2, y2]…] (squares), fog }
-  async function upload(o) {
+  async function upload(o, show) {
     const b = B(); if (!b || !b.buildSceneUpload || !OBR || !OBR.assets) throw new Error(T('Owlbear does not allow uploads here.'));
     const base = b.buildImageUpload(o.mapBlob).dpi(o.cellPx).name(o.name).locked(true).build();
     await sized(o.tokens.map(t => t.key));
@@ -231,8 +231,9 @@
       .layer('DRAWING').locked(true).disableHit(true).name('D&D Table: walls').metadata({ 'dndtable/walls': { s: flat, f: fl, cell: GD, mode: o.vision || '' } }).build());
     // no Owlbear fog fill: the fog comes from our vision (the DM picks the light with 🔦)
     const mk = full => b.buildSceneUpload().name(o.name).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(false).items(items.concat(full ? extra : [])).build();
-    try { await OBR.assets.uploadScenes([mk(true)]); return extra.length ? 'full' : 'ok'; }
-    catch (e) { if (!extra.length) throw e; console.warn('scene with walls / lights', e); await OBR.assets.uploadScenes([mk(false)]); return 'plain'; }
+    const hide = show === false;
+    try { await OBR.assets.uploadScenes([mk(true)], hide); return extra.length ? 'full' : 'ok'; }
+    catch (e) { if (!extra.length) throw e; console.warn('scene with walls / lights', e); await OBR.assets.uploadScenes([mk(false)], hide); return 'plain'; }
   }
   // the monsters of a prepared fight → { name, key } × qty
   function encTokens(enc) {
@@ -491,7 +492,10 @@
       log.push('📋 ' + esc(en.name));
     });
     U.saveEncounters();
-    for (const s of (sc.scenes || [])) {
+    const scs = sc.scenes || []; let nOk = 0; const fails = [];
+    for (const [si, s] of scs.entries()) {
+      msg('⏳ ' + T('Uploading…') + ' ' + (si + 1) + ' / ' + scs.length + ' — ' + esc(s.name || ''));
+      try {
       let blob, cellPx, map = null, W = 0, H = 0;
       if (s.map && typeof s.map === 'object') { map = U.makeMap(s.map.gen || 'cave', s.map.size || 'm', s.map.seed || 1, 80); blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9)); cellPx = 80; W = map.W; H = map.H; }
       else { const f = byPath[String(s.map || '').toLowerCase()] || byPath[String(s.map || '').split('/').pop().toLowerCase()]; if (!f) { log.push('⚠️ ' + T('no picture {0}', esc(s.map))); continue; } blob = f; cellPx = Number(s.cellPx) || 100; }
@@ -505,9 +509,12 @@
         const hs = map ? map.heroSpots(n) : st ? [[0, 0], [0, 1], [1, 0], [1, 1], [0, -1], [1, -1], [2, 0], [2, 1]].map(([dx, dy]) => [st[0] + dx, st[1] + dy]) : [];
         party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false }); });
       }
-      const r = await upload({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: Array.isArray(s.walls) ? s.walls : (map && s.walls !== false ? map.walls : []), vision: s.vision || (s.fog ? 'dusk' : '') });
-      log.push('🗺 ' + esc(s.name || '') + (r === 'plain' ? ' ' + T('(no walls)') : ''));
+      const r = await upload({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: Array.isArray(s.walls) ? s.walls : (map && s.walls !== false ? map.walls : []), vision: s.vision || (s.fog ? 'dusk' : '') }, si === scs.length - 1);
+      log.push('🗺 ' + esc(s.name || '') + (r === 'plain' ? ' ' + T('(no walls)') : '')); nOk++;
+      } catch (e) { console.warn('scene upload', s.name, e); fails.push(esc(s.name || '?') + ': ' + esc((e && (e.message || e.error || JSON.stringify(e))) || e)); }
     }
+    if (fails.length) log.unshift('⚠️ ' + T('Owlbear did not take {0} of {1} scenes:', fails.length, scs.length) + '<br>' + fails.slice(0, 8).join('<br>'));
+    if (scs.length) log.unshift('🗺 ' + T('Scenes uploaded: {0} of {1}. Owlbear → Scenes (top left).', nOk, scs.length));
     try { const n = await toLibrary(party(), allMonsters(), false); if (n) log.push('📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); } catch (e) { console.warn(e); }
     U.render(); scenesPop(); msg('✅ ' + T('Scenario «{0}» loaded:', esc(sc.name || '')) + '<br>' + log.join('<br>'));
   }
