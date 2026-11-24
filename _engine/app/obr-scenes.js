@@ -218,9 +218,31 @@
       .position({ x: (cx + 0.5) * GD, y: (cy + 0.5) * GD }).layer('CHARACTER').name(name).plainText(name).visible(!hidden).locked(false).metadata(meta || {}).build();
   }
   // o: { name, mapBlob, cellPx, W, H, tokens: [{ name, key, x, y, hidden }], walls: [[x1, y1, x2, y2]…] (squares), fog }
+  const safeName = n => String(n || '').replace(/[^\p{L}\p{N} .,'()-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Scene';
+  async function stdImage(blob, type) { // webp / anything else → JPEG (maps) or PNG (tokens, keeps transparency)
+    if (!blob || /^image\/(png|jpeg)$/.test(blob.type)) return blob;
+    const url = URL.createObjectURL(blob); try { const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
+      return await new Promise(ok => c.toBlob(ok, type === 'png' ? 'image/png' : 'image/jpeg', 0.9)); } catch (e) { return blob; } finally { URL.revokeObjectURL(url); }
+  }
+  // Owlbear asks the DM ONE «Select folder → Upload scenes» question per uploadScenes() call — so many scenes go in one call
+  async function uploadMany(list) {
+    if (!list.length) return 0;
+    try { await OBR.assets.uploadScenes(list.map(x => x.full)); return list.length; }
+    catch (e) { console.warn('all scenes in one go', e); }
+    try { await OBR.assets.uploadScenes(list.map(x => x.plain)); return list.length; } // without Owlbear's own walls
+    catch (e) { console.warn('all scenes without walls', e); }
+    let n = 0; for (let i = 0; i < list.length; i += 10) { await OBR.assets.uploadScenes(list.slice(i, i + 10).map(x => x.plain)); n += Math.min(10, list.length - i); } // too big at once → by ten
+    return n;
+  }
   async function upload(o, show) {
+    const sc = await buildScene(o); const hide = show === false;
+    try { await OBR.assets.uploadScenes([sc.full], hide); return sc.walls ? 'full' : 'ok'; }
+    catch (e) { if (!sc.walls) throw e; console.warn('scene with walls / lights', e); await OBR.assets.uploadScenes([sc.plain], hide); return 'plain'; }
+  }
+  async function buildScene(o) {
     const b = B(); if (!b || !b.buildSceneUpload || !OBR || !OBR.assets) throw new Error(T('Owlbear does not allow uploads here.'));
-    const base = b.buildImageUpload(o.mapBlob).dpi(o.cellPx).name(o.name).locked(true).build();
+    const base = b.buildImageUpload(await stdImage(o.mapBlob, 'jpeg')).dpi(o.cellPx).name(safeName(o.name)).locked(true).build();
     await sized(o.tokens.map(t => t.key));
     const items = o.tokens.map(t => tokenItem(t.name, t.key, t.x, t.y, t.hidden));
     // Owlbear's own WALL items (its Dynamic Fog extension can use them) — optional extras, dropped if Owlbear refuses them
@@ -230,10 +252,8 @@
     if (flat.length || o.vision) items.push(b.buildCurve().points([{ x: 0, y: 0 }, { x: 1, y: 0 }]).position({ x: 0, y: 0 }).strokeOpacity(0).fillOpacity(0).strokeWidth(0).tension(0).closed(false)
       .layer('DRAWING').locked(true).disableHit(true).name('D&D Table: walls').metadata({ 'dndtable/walls': { s: flat, f: fl, cell: GD, mode: o.vision || '' } }).build());
     // no Owlbear fog fill: the fog comes from our vision (the DM picks the light with 🔦)
-    const mk = full => b.buildSceneUpload().name(o.name).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(false).items(items.concat(full ? extra : [])).build();
-    const hide = show === false;
-    try { await OBR.assets.uploadScenes([mk(true)], hide); return extra.length ? 'full' : 'ok'; }
-    catch (e) { if (!extra.length) throw e; console.warn('scene with walls / lights', e); await OBR.assets.uploadScenes([mk(false)], hide); return 'plain'; }
+    const mk = full => b.buildSceneUpload().name(safeName(o.name)).baseMap(base).gridScale('5ft').gridType('SQUARE').gridMeasurement('CHEBYSHEV').fogFilled(false).items(items.concat(full ? extra : [])).build();
+    return { full: mk(true), plain: mk(false), walls: extra.length };
   }
   // the monsters of a prepared fight → { name, key } × qty
   function encTokens(enc) {
@@ -268,9 +288,9 @@
   async function toLibrary(heroes, mons, force) {
     const b = B(); if (!b || !b.buildImageUpload || !OBR.assets || !OBR.assets.uploadImages) throw new Error(T('Owlbear does not allow uploads here.'));
     const done = libDone(); const imgs = [];
-    for (const c of heroes) { const k = 'h:' + c.id; if (done[k] && !force) continue; const a = await heroAvatar(c); imgs.push(b.buildImageUpload(a.blob).dpi(a.px).name(c.name).build()); done[k] = 1; }
+    for (const c of heroes) { const k = 'h:' + c.id; if (done[k] && !force) continue; const a = await heroAvatar(c); imgs.push(b.buildImageUpload(await stdImage(a.blob, 'png')).dpi(a.px).name(safeName(c.name)).build()); done[k] = 1; }
     await sized(mons.map(m => m.key));
-    for (const m of mons) { const k = 'm:' + m.name; if (done[k] && !force) continue; imgs.push(b.buildImageUpload(await blobOf(tokURL(m.key))).dpi(Math.max(...(SIZE[m.key] || [256, 256]))).name(m.name).build()); done[k] = 1; }
+    for (const m of mons) { const k = 'm:' + m.name; if (done[k] && !force) continue; imgs.push(b.buildImageUpload(await stdImage(await blobOf(tokURL(m.key)), 'png')).dpi(Math.max(...(SIZE[m.key] || [256, 256]))).name(safeName(m.name)).build()); done[k] = 1; }
     if (imgs.length) await OBR.assets.uploadImages(imgs, 'CHARACTER');
     try { localStorage.setItem('dnd.obrLib', JSON.stringify(done)); } catch (e) {}
     return imgs.length;
@@ -492,9 +512,9 @@
       log.push('📋 ' + esc(en.name));
     });
     U.saveEncounters();
-    const scs = sc.scenes || []; let nOk = 0; const fails = [];
+    const scs = sc.scenes || []; let nOk = 0; const fails = []; const built = [];
     for (const [si, s] of scs.entries()) {
-      msg('⏳ ' + T('Uploading…') + ' ' + (si + 1) + ' / ' + scs.length + ' — ' + esc(s.name || ''));
+      msg('⏳ ' + T('Preparing the scenes…') + ' ' + (si + 1) + ' / ' + scs.length + ' — ' + esc(s.name || ''));
       try {
       let blob, cellPx, map = null, W = 0, H = 0;
       if (s.map && typeof s.map === 'object') { map = U.makeMap(s.map.gen || 'cave', s.map.size || 'm', s.map.seed || 1, 80); blob = await new Promise(ok => map.canvas.toBlob(ok, 'image/jpeg', 0.9)); cellPx = 80; W = map.W; H = map.H; }
@@ -509,10 +529,11 @@
         const hs = map ? map.heroSpots(n) : st ? [[0, 0], [0, 1], [1, 0], [1, 1], [0, -1], [1, -1], [2, 0], [2, 1]].map(([dx, dy]) => [st[0] + dx, st[1] + dy]) : [];
         party().forEach((c, i) => { if (hs[i]) tokens.push({ name: c.name, key: heroToken(c), x: hs[i][0], y: hs[i][1], hidden: false }); });
       }
-      const r = await upload({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: Array.isArray(s.walls) ? s.walls : (map && s.walls !== false ? map.walls : []), vision: s.vision || (s.fog ? 'dusk' : '') }, si === scs.length - 1);
-      log.push('🗺 ' + esc(s.name || '') + (r === 'plain' ? ' ' + T('(no walls)') : '')); nOk++;
+      built.push(await buildScene({ name: s.name || sc.name || 'Scene', mapBlob: blob, cellPx, tokens, walls: Array.isArray(s.walls) ? s.walls : (map && s.walls !== false ? map.walls : []), vision: s.vision || (s.fog ? 'dusk' : '') }));
+      log.push('🗺 ' + esc(s.name || ''));
       } catch (e) { console.warn('scene upload', s.name, e); fails.push(esc(s.name || '?') + ': ' + esc((e && (e.message || e.error || JSON.stringify(e))) || e)); }
     }
+    if (built.length) { msg('⏳ ' + T('Owlbear asks where to put the scenes: pick a folder (Default is fine) → «Upload scenes». Then wait — {0} maps are uploading.', built.length)); try { nOk = await uploadMany(built); } catch (e) { fails.push(esc((e && (e.message || e.error)) || String(e))); } }
     if (fails.length) log.unshift('⚠️ ' + T('Owlbear did not take {0} of {1} scenes:', fails.length, scs.length) + '<br>' + fails.slice(0, 8).join('<br>'));
     if (scs.length) log.unshift('🗺 ' + T('Scenes uploaded: {0} of {1}. Owlbear → Scenes (top left).', nOk, scs.length));
     try { const n = await toLibrary(party(), allMonsters(), false); if (n) log.push('📚 ' + T('{0} tokens are in the Owlbear library: the asset bar at the bottom → Characters → drag them onto the map.', n)); } catch (e) { console.warn(e); }
