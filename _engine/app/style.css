@@ -343,7 +343,7 @@ details.cbsetup { margin: 8px 0; border: 1px solid #3a2e20; border-radius: 8px; 
 .le s, #toast s { opacity: .55; }
 @media (prefers-reduced-motion: reduce) { #diceAnim.rolling .die, #diceAnim.landed .num, #diceAnim.rolling .d20, #diceAnim.landed .dcol { animation: none; } }
 /* top bar: music, sound, settings */
-.topctl { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+.topctl { display: inline-flex; flex-wrap: wrap; gap: 3px; margin-left: 6px; vertical-align: middle; max-width: 100%; }
 .topctl .tb { padding: 1px 6px; font-size: 13px; border-radius: 6px; line-height: 1.4; }
 .topctl .tb.on { border-color: var(--gold); background: #3a3127; }
 .popcard.settings { max-width: 440px; width: 92vw; text-align: left; max-height: 88vh; overflow-y: auto; }

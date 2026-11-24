@@ -515,6 +515,6 @@
   U._importScenario = importFolder; // (tests)
   // the 🗺 button in the DM's top bar
   const top0 = U.renderTop;
-  U.renderTop = function () { top0(); const el = document.getElementById('topCtl'); if (el && U.DM) el.insertAdjacentHTML('beforeend', '<button class="tb" data-act="scenes" title="' + esc(T('Scenes for Owlbear: make a map, put the monsters and heroes, upload')) + '">🗺</button>'); };
+  U.renderTop = function () { top0(); const el = document.getElementById('topCtl'); const ps = el && el.querySelector('[data-act="panelSize"]'); if (el && U.DM) (ps || el).insertAdjacentHTML(ps ? 'beforebegin' : 'beforeend', '<button class="tb" data-act="scenes" title="' + esc(T('Scenes for Owlbear: make a map, put the monsters and heroes, upload')) + '">🗺</button>'); };
   if (document.getElementById('topCtl')) U.renderTop();
 })(window.UI);
