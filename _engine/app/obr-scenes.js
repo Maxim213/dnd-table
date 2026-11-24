@@ -474,6 +474,12 @@
     const byPath = {}; files.forEach(f => { const p = (f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name; byPath[p.toLowerCase()] = f; byPath[f.name.toLowerCase()] = byPath[f.name.toLowerCase()] || f; });
     const jf = byPath['scenario.json'] || files.find(f => /scenario\.json$/i.test(f.name)); if (!jf) throw new Error(T('No scenario.json in this folder.'));
     const sc = JSON.parse(await jf.text()); const log = [];
+    // the app scenario (monsters, items, shops, sides) can ride along in the same folder: "appScenario": "file.scenario.json" or any *.scenario.json
+    const af = (sc.appScenario && byPath[String(sc.appScenario).toLowerCase()]) || files.find(f => /\.scenario\.json$/i.test(f.name) && f !== jf);
+    if (af && window.SCN && SCN.installNow) {
+      try { const p = JSON.parse(await af.text()); if (SCN.installNow(p)) { log.push('📜 ' + T('App scenario: {0}', esc((Array.isArray(p.ru) ? p.ru[0] : p.name) || p.id)) + ' (' + Object.keys(p.monsters || {}).length + ' 👹, ' + ((p.shops || []).length + (p.shop ? 1 : 0)) + ' 🛒)'); U.render(); } }
+      catch (e) { log.push('⚠️ ' + esc(af.name) + ': ' + esc(e.message || e)); }
+    }
     // monsters
     (sc.monsters || []).forEach(m0 => { if (!m0 || !m0.name) return; if (S.monsters.some(m => m.name === m0.name)) return; const m = Object.assign({}, m0, { id: E.uid() }); S.monsters.unshift(m); log.push('👹 ' + esc(m.name)); });
     U.saveMonsters();

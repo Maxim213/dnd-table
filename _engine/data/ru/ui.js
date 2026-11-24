@@ -1001,6 +1001,7 @@ window.DND_RU.UI = {
   'Bag': 'Инвентарь',
   'Card': 'Карточка',
   'Rolls': 'Броски',
+  'App scenario: {0}': 'Сценарий приложения: {0}',
   'Weaker: CR −1 (abilities stay, numbers change)': 'Слабее: ПО −1 (приёмы остаются, цифры меняются)',
   'Stronger: CR +1 (abilities stay, numbers change)': 'Сильнее: ПО +1 (приёмы остаются, цифры меняются)',
   'Any side': 'Любая сторона',

@@ -54,6 +54,8 @@ window.SCN = (function () {
     Object.keys(p.feats || {}).forEach(k => { D.GENERAL_FEATS = D.GENERAL_FEATS || {}; D.GENERAL_FEATS[k] = tag(Object.assign({ abil: ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] }, p.feats[k])); });
     Object.keys(p.monsters || {}).forEach(k => { D.MONSTERS[k] = tag(p.monsters[k]); });
   }
+  // install + switch on a scenario at once, without a reload (the Owlbear «scenario from a folder» brings the app scenario along)
+  SCN.installNow = p => { if (!SCN.valid(p)) return false; SCN.save(p); SCN.choose(p.id); SCN.active = p; try { apply(p); } catch (e) { console.error(e); return false; } (D.AFTER_LANG || []).forEach(f => { try { f(D.LANG || 'ru'); } catch (e) {} }); return true; };
   const id = SCN.activeId(); const all = SCN.all();
   if (id && all[id] && SCN.valid(all[id])) {
     SCN.active = all[id];
