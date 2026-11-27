@@ -55,7 +55,7 @@ window.SCN = (function () {
     Object.keys(p.monsters || {}).forEach(k => { D.MONSTERS[k] = tag(p.monsters[k]); });
   }
   // install + switch on a scenario at once, without a reload (the Owlbear «scenario from a folder» brings the app scenario along)
-  SCN.installNow = p => { if (!SCN.valid(p)) return false; SCN.save(p); SCN.choose(p.id); SCN.active = p; try { apply(p); } catch (e) { console.error(e); return false; } (D.AFTER_LANG || []).forEach(f => { try { f(D.LANG || 'ru'); } catch (e) {} }); return true; };
+  SCN.installNow = p => { if (!SCN.valid(p)) return false; SCN.saved = SCN.save(p); /* false = browser storage full: works now, lost after a reload */ SCN.choose(p.id); SCN.active = p; try { apply(p); } catch (e) { console.error(e); return false; } (D.AFTER_LANG || []).forEach(f => { try { f(D.LANG || 'ru'); } catch (e) {} }); return true; };
   const id = SCN.activeId(); const all = SCN.all();
   if (id && all[id] && SCN.valid(all[id])) {
     SCN.active = all[id];

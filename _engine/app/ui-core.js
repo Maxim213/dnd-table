@@ -79,7 +79,7 @@ window.UI = (function () {
       return ok;
     }
   };
-  const S = U.S = { step: 0, mode: 'normal', editing: {}, combatTab: 'fight', monSel: null };
+  const S = U.S = { step: 0, mode: 'normal', editing: {}, combatTab: 'fight', monSel: null, rollsSeen: Date.now() };
   U.loadState = function () { // (re)load everything of the open game into S
     Object.assign(S, {
       chars: store.get('chars', []).map(E.normalize),
@@ -463,7 +463,15 @@ window.UI = (function () {
     const el = document.getElementById('side'); if (el) el.innerHTML = U.diceHtml() + U.logHtml();
     const sl = document.getElementById('sheetLog'); if (sl) sl.innerHTML = U.logHtml(); // the 📜 tab of the hero sheet
     const sd = document.getElementById('sheetDice'); if (sd && !sd.contains(document.activeElement)) sd.innerHTML = U.diceHtml();
+    const rl = document.getElementById('rollsLog'); if (rl) rl.innerHTML = U.logHtml(); // the 🎲 Rolls tab (narrow panel)
+    const rd = document.getElementById('rollsDice'); if (rd && !rd.contains(document.activeElement)) rd.innerHTML = U.diceHtml();
+    // the 🎲 tab shows how many new log lines came in while you were on another tab
+    if (S.view === 'rolls') S.rollsSeen = Date.now();
+    const tab = document.querySelector('[data-act="nav"][data-v="rolls"]');
+    if (tab) { const n = S.log.filter(x => x.t > (S.rollsSeen || 0)).length; let b = tab.querySelector('.newn'); if (!b) { b = document.createElement('span'); b.className = 'newn'; tab.appendChild(b); } b.textContent = n ? String(Math.min(n, 99)) : ''; b.hidden = !n; }
   };
+  // narrow panel (Owlbear): the dice and the log are a tab of their own, not a block under every page
+  U.views.rolls = () => '<div class="page rolls"><div id="rollsDice">' + U.diceHtml() + '</div><div id="rollsLog">' + U.logHtml() + '</div></div>';
 
   // ======================================================================
   //  RENDER

@@ -618,7 +618,14 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     const L = setupsOf(); const ob = OBR_ON();
     let h = '<div class="page setups"><div class="ph"><h1>🎬 ' + T('Setups') + '</h1></div>' +
       '<p class="lead">' + T('Ready scenes of the scenario: one click and everybody is on the map. The difficulty is counted for your party (heroes marked “In party”).') + (ob ? '' : ' <b>' + T('Tokens go onto the map only in Owlbear; here you can still start the fight.') + '</b>') + '</p>';
-    if (!L.length) return h + '<div class="emptybig"><p>' + T('The active scenario has no setups. Load the campaign scenario (⚙️ → 📜 Scenario).') + '</p></div></div>';
+    if (L.length && SCN.active && SCN.active.updated) h += '<p class="hint">📜 ' + T('Scenario from {0}', esc(new Date(SCN.active.updated).toLocaleString())) + '</p>';
+    if (!L.length) {
+      const A = window.SCN && SCN.active; const nm = A ? (A.title || (U.LANG === 'ru' && Array.isArray(A.ru) ? A.ru[0] : A.name)) : '';
+      return h + '<div class="emptybig"><p>' + (A ? T('Your scenario «{0}» is an old copy without setups.', esc(nm)) : T('No campaign scenario is loaded yet.')) + '</p>' +
+        '<p>' + T('Load the new file {0} — only this one file, the maps stay as they are.', '<b>LastKingdom.scenario.json</b>') + '</p>' +
+        '<p><button class="primary" data-act="importChar">📜 ' + T('Load the scenario file') + '</button></p>' +
+        '<p class="hint">' + T('The file is in the campaign folder (and in Owlbear_Pack). The page reloads after loading.') + '</p></div></div>';
+    }
     h += '<div class="btnrow sunav">' + L.map(x => '<button class="chip" data-act="suJump" data-id="' + esc(x.id) + '">' + esc((x.icon || '') + ' ' + x.name) + '</button>').join('') + '</div>';
     h += L.map(x => {
       const foes = suList(x.foes), res = suList(x.reserve);

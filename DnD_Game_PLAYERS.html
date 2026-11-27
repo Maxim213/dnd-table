@@ -578,6 +578,12 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
 .setups .detail.setup { scroll-margin-top: 70px; margin-bottom: 14px; }
 .setups .surows { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 8px; }
 .setups .surow .tag { font-size: 11px; padding: 0 6px; border: 1px solid rgba(201,160,74,.4); border-radius: 999px; }
+/* narrow panel (Owlbear): the dice + log column is not stacked under every page — it is the 🎲 Rolls tab */
+@media (min-width: 1001px) { .top nav .rolls-tab { display: none; } }
+@media (max-width: 1000px) { #side { display: none; } }
+.top nav .rolls-tab .newn { display: inline-block; min-width: 16px; margin-left: 4px; padding: 0 4px; border-radius: 8px; background: var(--gold); color: #1a1208; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+.top nav .rolls-tab .newn[hidden] { display: none; }
+.page.rolls { display: flex; flex-direction: column; gap: 12px; }
 
 </style>
 </head>
@@ -590,6 +596,7 @@ nav button.myturn { background: #5a3d18; border-color: var(--gold); color: var(-
     <button class="need-game" data-act="nav" data-v="items" data-t="🎒 Equipment">🎒 Equipment</button>
     <button class="dm-only need-game" data-act="nav" data-v="combat" data-t="⚔️ Combat">⚔️ Combat</button>
     <button class="dm-only need-game" data-act="nav" data-v="setups" data-t="🎬 Setups">🎬 Setups</button>
+    <button class="need-game rolls-tab" data-act="nav" data-v="rolls" data-t="🎲 Rolls">🎲 Rolls</button>
     <button data-act="nav" data-v="help" data-t="❓ How to use">❓ How to use</button>
   </nav>
 </header>
@@ -6266,6 +6273,13 @@ window.DND_RU.UI = {
   'Bag': 'Инвентарь',
   'Card': 'Карточка',
   'Rolls': 'Броски',
+  '🎲 Rolls': '🎲 Броски',
+  'Your scenario «{0}» is an old copy without setups.': 'У тебя загружена старая копия сценария «{0}» — в ней ещё нет сетапов и лавки Шпильки.',
+  'No campaign scenario is loaded yet.': 'Сценарий кампании ещё не загружен.',
+  'Load the new file {0} — only this one file, the maps stay as they are.': 'Загрузи новый файл {0} — только его, карты и сцены перезаливать не надо.',
+  'Load the scenario file': 'Загрузить файл сценария',
+  'The file is in the campaign folder (and in Owlbear_Pack). The page reloads after loading.': 'Файл лежит в папке кампании (и в Owlbear_Pack). После загрузки нажми «ОК» — страница перезагрузится.',
+  'Scenario from {0}': 'Сценарий от {0}',
   '🎬 Setups': '🎬 Сетапы',
   'Setups': 'Сетапы',
   'Ready scenes of the scenario: one click and everybody is on the map. The difficulty is counted for your party (heroes marked “In party”).': 'Готовые сцены сценария: один клик — и все на карте. Сложность считается для твоего отряда (герои с галочкой «В отряде»).',
@@ -6735,7 +6749,7 @@ window.SCN = (function () {
     Object.keys(p.monsters || {}).forEach(k => { D.MONSTERS[k] = tag(p.monsters[k]); });
   }
   // install + switch on a scenario at once, without a reload (the Owlbear «scenario from a folder» brings the app scenario along)
-  SCN.installNow = p => { if (!SCN.valid(p)) return false; SCN.save(p); SCN.choose(p.id); SCN.active = p; try { apply(p); } catch (e) { console.error(e); return false; } (D.AFTER_LANG || []).forEach(f => { try { f(D.LANG || 'ru'); } catch (e) {} }); return true; };
+  SCN.installNow = p => { if (!SCN.valid(p)) return false; SCN.saved = SCN.save(p); /* false = browser storage full: works now, lost after a reload */ SCN.choose(p.id); SCN.active = p; try { apply(p); } catch (e) { console.error(e); return false; } (D.AFTER_LANG || []).forEach(f => { try { f(D.LANG || 'ru'); } catch (e) {} }); return true; };
   const id = SCN.activeId(); const all = SCN.all();
   if (id && all[id] && SCN.valid(all[id])) {
     SCN.active = all[id];
@@ -7407,7 +7421,7 @@ window.UI = (function () {
       return ok;
     }
   };
-  const S = U.S = { step: 0, mode: 'normal', editing: {}, combatTab: 'fight', monSel: null };
+  const S = U.S = { step: 0, mode: 'normal', editing: {}, combatTab: 'fight', monSel: null, rollsSeen: Date.now() };
   U.loadState = function () { // (re)load everything of the open game into S
     Object.assign(S, {
       chars: store.get('chars', []).map(E.normalize),
@@ -7791,7 +7805,15 @@ window.UI = (function () {
     const el = document.getElementById('side'); if (el) el.innerHTML = U.diceHtml() + U.logHtml();
     const sl = document.getElementById('sheetLog'); if (sl) sl.innerHTML = U.logHtml(); // the 📜 tab of the hero sheet
     const sd = document.getElementById('sheetDice'); if (sd && !sd.contains(document.activeElement)) sd.innerHTML = U.diceHtml();
+    const rl = document.getElementById('rollsLog'); if (rl) rl.innerHTML = U.logHtml(); // the 🎲 Rolls tab (narrow panel)
+    const rd = document.getElementById('rollsDice'); if (rd && !rd.contains(document.activeElement)) rd.innerHTML = U.diceHtml();
+    // the 🎲 tab shows how many new log lines came in while you were on another tab
+    if (S.view === 'rolls') S.rollsSeen = Date.now();
+    const tab = document.querySelector('[data-act="nav"][data-v="rolls"]');
+    if (tab) { const n = S.log.filter(x => x.t > (S.rollsSeen || 0)).length; let b = tab.querySelector('.newn'); if (!b) { b = document.createElement('span'); b.className = 'newn'; tab.appendChild(b); } b.textContent = n ? String(Math.min(n, 99)) : ''; b.hidden = !n; }
   };
+  // narrow panel (Owlbear): the dice and the log are a tab of their own, not a block under every page
+  U.views.rolls = () => '<div class="page rolls"><div id="rollsDice">' + U.diceHtml() + '</div><div id="rollsLog">' + U.logHtml() + '</div></div>';
 
   // ======================================================================
   //  RENDER
@@ -9581,7 +9603,14 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
     const L = setupsOf(); const ob = OBR_ON();
     let h = '<div class="page setups"><div class="ph"><h1>🎬 ' + T('Setups') + '</h1></div>' +
       '<p class="lead">' + T('Ready scenes of the scenario: one click and everybody is on the map. The difficulty is counted for your party (heroes marked “In party”).') + (ob ? '' : ' <b>' + T('Tokens go onto the map only in Owlbear; here you can still start the fight.') + '</b>') + '</p>';
-    if (!L.length) return h + '<div class="emptybig"><p>' + T('The active scenario has no setups. Load the campaign scenario (⚙️ → 📜 Scenario).') + '</p></div></div>';
+    if (L.length && SCN.active && SCN.active.updated) h += '<p class="hint">📜 ' + T('Scenario from {0}', esc(new Date(SCN.active.updated).toLocaleString())) + '</p>';
+    if (!L.length) {
+      const A = window.SCN && SCN.active; const nm = A ? (A.title || (U.LANG === 'ru' && Array.isArray(A.ru) ? A.ru[0] : A.name)) : '';
+      return h + '<div class="emptybig"><p>' + (A ? T('Your scenario «{0}» is an old copy without setups.', esc(nm)) : T('No campaign scenario is loaded yet.')) + '</p>' +
+        '<p>' + T('Load the new file {0} — only this one file, the maps stay as they are.', '<b>LastKingdom.scenario.json</b>') + '</p>' +
+        '<p><button class="primary" data-act="importChar">📜 ' + T('Load the scenario file') + '</button></p>' +
+        '<p class="hint">' + T('The file is in the campaign folder (and in Owlbear_Pack). The page reloads after loading.') + '</p></div></div>';
+    }
     h += '<div class="btnrow sunav">' + L.map(x => '<button class="chip" data-act="suJump" data-id="' + esc(x.id) + '">' + esc((x.icon || '') + ' ' + x.name) + '</button>').join('') + '</div>';
     h += L.map(x => {
       const foes = suList(x.foes), res = suList(x.reserve);
