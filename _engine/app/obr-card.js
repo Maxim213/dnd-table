@@ -167,7 +167,7 @@ export function startCard(OBR, opts) {
       if (!f.acts) return h + '<p class="tc-hint">' + tr('A player\'s hero — the player acts himself.', 'Это герой игрока — он ходит сам.') + '</p>' + next;
       const tgt = lk ? entryOfLink(lk) : null;
       const pct = (hit, ac) => { let p = Math.max(0.05, Math.min(0.95, (21 - (ac - hit)) / 20)); if (mode === 'adv') p = 1 - (1 - p) * (1 - p); if (mode === 'dis') p = p * p; return Math.round(p * 100); };
-      const btn = (a, tid) => '<button data-dmact="' + esc(a.id) + '" data-tid="' + esc(tid) + '"' + (a.blocked ? ' disabled' : '') + '><b>' + esc(a.n) + (a.heal ? ' ❤️' : '') + '</b><small>' + esc(a.info || '') +
+      const btn = (a, tid) => '<button data-dmact="' + esc(a.id) + '" data-tid="' + esc(tid) + '"' + (a.blocked ? ' class="spent"' : '') + '><b>' + esc(a.n) + (a.heal ? ' ❤️' : '') + '</b><small>' + esc(a.info || '') +
         (a.hit != null && tgt && tgt.ac != null ? ' · 🎯 ' + pct(a.hit, Number(tgt.ac)) + '%' : '') + (a.left != null ? ' · ' + tr('left', 'осталось') + ' ' + a.left : '') + (a.blocked ? ' · ' + tr('used', 'потрачено') : '') + '</small></button>';
       if (tgt && tgt.id !== act.id) {
         h += '<h4>🎯 ' + esc(act.n) + ' → ' + esc(tgt.n) + (tgt.ac != null ? ' (' + tr('AC', 'КД') + ' ' + esc(tgt.ac) + ')' : '') + '</h4>' +
@@ -439,7 +439,7 @@ export function startCard(OBR, opts) {
         return;
       }
       if (DM && (b.dataset.dmact || b.dataset.do === 'dmnext')) { // to the DM's panel (online.js → dmAct): it rolls and applies
-        const Q = get('obrActQ', []); Q.push({ id: Math.random().toString(36).slice(2, 10), t: Date.now(), dm: 1, kind: b.dataset.dmact ? 'act' : 'next', aid: b.dataset.dmact || '', tid: b.dataset.tid || '', mode });
+        const Q = get('obrActQ', []); Q.push({ id: Math.random().toString(36).slice(2, 10), t: Date.now(), dm: 1, kind: b.dataset.dmact ? 'act' : 'next', aid: b.dataset.dmact || '', tid: b.dataset.tid || '', ttok: item && b.dataset.tid !== '__all' ? item.id : '', mode });
         set('obrActQ', Q.slice(-20)); mode = 'normal';
         note = b.dataset.dmact ? '🎲 ' + tr('Rolled — see the log.', 'Брошено — смотри журнал.') : '⏭ ' + tr('Next turn.', 'Следующий ход.');
         try { if (!(await OBR.action.isOpen())) await OBR.action.open(); } catch (e) {} // the panel does the roll: it must be open

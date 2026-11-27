@@ -450,7 +450,14 @@ window.UI = (function () {
   };
   U.logHtml = function () {
     return '<div class="panel log"><div class="lh"><b>' + T('Roll log') + '</b><button class="link" data-act="clearLog">' + T('clear') + '</button></div>' +
-      (S.log.length ? S.log.map(x => '<div class="le">' + x.html + '</div>').join('') : '<div class="empty">' + T('Rolls appear here.') + '</div>') + '</div>';
+      (S.log.length ? S.log.map(x => '<div class="le' + (x.dm ? ' dmnote' : '') + '">' + x.html + '</div>').join('') : '<div class="empty">' + T('Rolls appear here.') + '</div>') + '</div>';
+  };
+  // ⚖️ the DM broke a rule (an action already used, a used-up ability, too far): it still happens — only the DM's log says so.
+  // Such entries carry no 'mine' flag, so they are never sent to the players (obr-bg.js sends only 'mine' entries).
+  U.dmNote = function (msg) {
+    if (!U.DM) return;
+    S.log.unshift({ t: Date.now(), id: E.uid(), dm: 1, html: '<div class="lw">⚖️ ' + esc(T('Only you see this')) + '</div><div>' + esc(T('Against the rules')) + ': ' + esc(msg) + '</div>' });
+    S.log = S.log.slice(0, 150); U.saveLog(); U.renderSide();
   };
   U.renderSide = function () {
     const el = document.getElementById('side'); if (el) el.innerHTML = U.diceHtml() + U.logHtml();
@@ -463,7 +470,7 @@ window.UI = (function () {
   // ======================================================================
   U.render = function () {
     const main = document.getElementById('main');
-    let v = S.view; if (U.PLAYER && (v === 'combat' || v === 'games')) v = S.view = 'home';
+    let v = S.view; if (U.PLAYER && (v === 'combat' || v === 'games' || v === 'setups')) v = S.view = 'home';
     if (U.DM && !U.game && v !== 'help') v = S.view = 'games';
     const fn = U.views[v] || U.views.home;
     main.innerHTML = fn();

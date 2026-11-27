@@ -274,6 +274,14 @@
     } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); }
   };
 
+  // 🎬 setups: many tokens at once, next to each other in the middle of the screen.
+  // list: [{ name, m (a monster → its token) | key (a token key), npc (a person for the scene, never pulled into a fight), hidden, link }]
+  U.obrPlace = async list => {
+    const L = list.map(o => ({ name: o.name, key: o.key || (o.m ? monToken(o.m) : monToken({ name: o.name })), hidden: o.npc ? false : o.hidden != null ? o.hidden : ST.hide,
+      meta: Object.assign({}, o.m ? { 'dndtable/mon': { mid: o.m.id, cr: o.m.cr || '' } } : {}, o.link ? { 'dndtable/link': o.link } : {}, o.npc ? { 'dndtable/npc': true } : {}) }));
+    const n = await toScene(L); readSoon(); return n;
+  };
+  U.obrHidden = () => ST.hide;
   // "🗺 Onto the scene" on a hero's card in 🧙 Characters (linked to the hero at once)
   U.obrHeroToScene = true;
   U.ACT.heroToScene = async ds => {
@@ -320,6 +328,7 @@
     const all = U.allMonsters ? U.allMonsters() : []; const links = {}; const skipped = [];
     for (const t of toks) {
       const md = t.metadata || {}; const l = md['dndtable/link'];
+      if (md['dndtable/npc']) continue; // a person put there by a 🎬 setup (the king, a merchant): not a fighter
       const hero = l && l.k === 'pc' ? U.byId(l.cid) : (S.chars || []).find(c => norm(c.name) === norm(t.name));
       if (hero) { if (!S.combat.list.some(x => x.charId === hero.id)) S.combat.list.push({ id: E.uid(), type: 'pc', charId: hero.id, init: null }); links[t.id] = { k: 'pc', cid: hero.id, n: hero.name }; continue; }
       const mm = md['dndtable/mon']; let m = mm && U.monById ? U.monById(mm.mid) : null;

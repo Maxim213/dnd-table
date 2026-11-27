@@ -135,6 +135,8 @@
     return { ac: cb.ac, hp: cb.hp, hpMax: cb.hpMax, temp: Number(cb.temp) || 0, holder: U.holder(cb), name: cb.name };
   }
   const sortCombat = () => S.combat.list.sort((a, b) => (Number(b.init) || -99) - (Number(a.init) || -99) || (b.dex || 0) - (a.dex || 0));
+  // how many times a turn: a monster with Multiattack makes that many attacks with its action
+  const perTurn = (x, k) => (x && x.type === 'mon' && k === 'a' ? Math.max(1, Number(x.multi) || 1) : 1);
   const isOut = cb => { const v = cbView(cb); return !v || (cb.type === 'mon' && v.hp <= 0); };
   function addPc(id) { if (S.combat.list.some(x => x.charId === id)) return; S.combat.list.push({ id: E.uid(), type: 'pc', charId: id, init: null }); }
   function addMon(m, q) {
@@ -271,8 +273,8 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
         (hasArea ? opt('__all', active.type === 'pc' ? T('⚡ All monsters (area — saves only)') : T('⚡ All characters (area — saves only)'), tgt) : '') +
         allT.filter(x => x.id !== active.id && cbView(x)).map(x => { const tv = cbView(x); return opt(x.id, tv.name + ' (' + T('AC') + ' ' + tv.ac + ', ' + tv.hp + ' ' + T('HP') + ')', tgt); }).join('') + opt(active.id, T('Self'), tgt) + '</select></label>' +
         '<p class="hint">' + T('Each button shows the chance to hit (or that the target fails its save) and the average damage ≈.') + ' ' + ib('hitchance') + ' ' + ib('savechance') + '</p>';
-      const spentK = a => { const k = U.actCost(a); return k !== '-' && active.econ && active.econ[k] >= 1; };
-      h += U.econChips(active.econ) + '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + (spentK(a) ? ' spent' : '') + '"' + (a.blocked ? ' disabled' : '') + (spentK(a) ? ' title="' + esc(T('Already used this turn — the app will ask first')) + '"' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
+      const spentK = a => { const k = U.actCost(a); return k !== '-' && active.econ && active.econ[k] >= perTurn(active, k); };
+      h += U.econChips(active.econ) + '<div class="actlist">' + acts.map(a => '<button class="actb ' + a.kind + (spentK(a) || a.blocked ? ' spent' : '') + '"' + (spentK(a) || a.blocked ? ' title="' + esc(T('Against the rules — it still works, the log tells only you')) + '"' : '') + ' data-act="cbAct" data-aid="' + esc(a.id) + '"><b>' + esc(a.name) + (a.left != null ? ' ' + T('({0} left)', a.left) : '') + (a.blocked ? ' — ' + T('used') : '') + '</b><small>' +
         oddsLine(a, active, tcb, enemies, ctx) + '</small></button>').join('') + '</div>';
       if (active.type === 'mon') {
         if (active.multi) h += '<p class="hint">' + T('Multiattack: {0} attacks per turn.', active.multi) + '</p>';
@@ -474,9 +476,9 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
       };
       // turn economy: what this costs; the DM may still click it (only a warning), players' requests are checked before (online.js)
       const econ = active.econ = active.econ || U.econNew();
-      // the DM clicks something already used this turn: by the rules it can't happen — ask first (players' requests are checked in online.js)
-      const okToSpend = a => { const k = ds.cost || U.actCost(a); if (ds.remote || ds.quiet || k === '-' || !(econ[k] >= 1)) return true; return confirm(T('{0} is already used this turn. By the rules {1} cannot do this now. Do it anyway?', T(ECON_NAME[k]), active.type === 'pc' ? (U.byId(active.charId) || {}).name || '' : active.name)); };
-      const spend = a => { const k = ds.cost || U.actCost(a); if (k !== '-' && econ[k] >= 1 && ds.quiet) U.toast('⚠️ ' + T('Already used this turn: {0}. (You are the DM — it still works.)', T(ECON_NAME[k]))); if (k !== '-') econ[k] = (econ[k] || 0) + 1; };
+      // the DM clicks something already used this turn: by the rules it can't happen — it still works, a note only the DM sees says so (players' requests are checked in online.js)
+      const okToSpend = a => { const k = ds.cost || U.actCost(a); if (ds.remote || k === '-' || !(econ[k] >= perTurn(active, k))) return true; U.dmNote(T('{0} is already used this turn. By the rules {1} cannot do this now.', T(ECON_NAME[k]), active.type === 'pc' ? (U.byId(active.charId) || {}).name || '' : active.name)); return true; };
+      const spend = a => { const k = ds.cost || U.actCost(a);  if (k !== '-') econ[k] = (econ[k] || 0) + 1; };
       // several chosen targets (Bless, Magic Missile darts split between them, an area placed on the map): ds.tids
       const tl = Array.isArray(ds.tids) ? ds.tids.map(id => cb.list.find(x => x.id === id)).filter(Boolean).map(U.cbTarget).filter(Boolean) : null;
       const res = (a, att) => {
@@ -495,7 +497,7 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
         lines = ['<b>' + esc(a.name) + '</b>' + (w ? ' <small>(' + w + ')</small>' : '')].concat(res(a, U.attackerOf(c)));
         U.saveChars();
       } else {
-        const a = monActions(active).find(x => x.id === ds.aid); if (!a || a.blocked) return; if (!okToSpend(a)) return; who = active.name; spend(a);
+        const a = monActions(active).find(x => x.id === ds.aid); if (!a) return; if (a.blocked) U.dmNote(T('{0}: «{1}» is used up (no uses left or it has not recharged).', active.name, a.name)); if (!okToSpend(a)) return; who = active.name; spend(a);
         if (a.abId) {
           const ab = active.abilities.find(x => x.id === a.abId);
           active.used = active.used || {}; active.used[ab.id] = (active.used[ab.id] || 0) + 1;
@@ -590,4 +592,92 @@ const ECON_NAME = U.ECON_NAME; // turn economy helpers live in ui-core.js (playe
   });
   // live search in the monster filter (keeps the cursor in the box)
   U.IN.mfQ = el => { mf().q = el.value; U.render(); const i = document.querySelector('.mfq'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
+
+  // ======================================================================
+  //  🎬 SETUPS (DM) — ready scenes from the active scenario ("setups": [...]):
+  //  a fight for the party (enemies + reinforcements), the people of a scene (the king, a merchant) and a shop.
+  //  One click: the tokens go onto the Owlbear scene, or the enemies go straight into the fight.
+  //  setup: { id, icon, name, place, notes, tactics, loot,
+  //           foes: [{ mid, qty, cr? }], reserve: [{ mid, qty, cr? }], reserveNote, people: [names], shop: shop id, shopNpc: name }
+  // ======================================================================
+  const setupsOf = () => (window.SCN && SCN.active && Array.isArray(SCN.active.setups) ? SCN.active.setups : []);
+  const suById = id => setupsOf().find(x => x.id === id);
+  const suMon = x => { const m = monById(x.mid) || allMonsters().find(y => y.name === x.name); return m ? atCr(m, x.cr || '') : null; };
+  const suList = L => (L || []).map(x => ({ m: suMon(x), qty: Math.max(1, Number(x.qty) || 1), x }));
+  const OBR_ON = () => !!(U.obrPlace && window.OBR);
+  const plainName = n => String(n || '').replace(/\s*\[[^\]]*\]$/, '');
+  function suRows(items) {
+    return '<div class="surows">' + items.map(({ m, qty, x }) => {
+      if (!m) return '<div class="surow fail">' + T('missing') + ': ' + esc(x.mid || x.name || '?') + '</div>';
+      const R = crInfo(m.cr);
+      return '<div class="surow"><b>' + qty + '×</b> ' + esc(plainName(m.name)) + ' <span class="tag">' + esc(crShort(m.cr)) + '</span> <small class="hint">' + T('AC') + ' ' + esc(m.ac) + ' · ' + esc(m.hp) + ' ' + T('HP') + (R ? ' · ' + R.xp * qty + ' XP' : '') + '</small></div>';
+    }).join('') + '</div>';
+  }
+  U.views.setups = function () {
+    if (!U.DM) return '';
+    const L = setupsOf(); const ob = OBR_ON();
+    let h = '<div class="page setups"><div class="ph"><h1>🎬 ' + T('Setups') + '</h1></div>' +
+      '<p class="lead">' + T('Ready scenes of the scenario: one click and everybody is on the map. The difficulty is counted for your party (heroes marked “In party”).') + (ob ? '' : ' <b>' + T('Tokens go onto the map only in Owlbear; here you can still start the fight.') + '</b>') + '</p>';
+    if (!L.length) return h + '<div class="emptybig"><p>' + T('The active scenario has no setups. Load the campaign scenario (⚙️ → 📜 Scenario).') + '</p></div></div>';
+    h += '<div class="btnrow sunav">' + L.map(x => '<button class="chip" data-act="suJump" data-id="' + esc(x.id) + '">' + esc((x.icon || '') + ' ' + x.name) + '</button>').join('') + '</div>';
+    h += L.map(x => {
+      const foes = suList(x.foes), res = suList(x.reserve);
+      let c = '<div class="detail setup" id="su-' + esc(x.id) + '"><div class="ph"><h3>' + esc((x.icon || '') + ' ' + x.name) + '</h3>' + (x.place ? '<span class="tag">🗺 ' + esc(x.place) + '</span>' : '') + '</div>';
+      if (x.notes) c += '<p>' + esc(x.notes) + '</p>';
+      if ((x.people || []).length) c += '<h4>🎭 ' + T('People on the scene') + '</h4><p>' + x.people.map(n => '<span class="chip small">' + esc(n) + '</span>').join(' ') + '</p>' +
+        '<div class="btnrow"><button' + (ob ? '' : ' disabled') + ' data-act="suPlace" data-id="' + esc(x.id) + '" data-part="people">🗺 ' + T('People onto the scene') + '</button></div>';
+      if (foes.length) {
+        const df = difficulty(foes.filter(f => f.m));
+        c += '<h4>⚔️ ' + (x.fightName ? esc(x.fightName) : T('Enemies')) + '</h4>' + suRows(foes) + '<div class="diffline ' + df.cls + '">' + T('Difficulty') + ': ' + df.txt + '</div>' +
+          '<div class="btnrow"><button class="primary" data-act="suFight" data-id="' + esc(x.id) + '"' + (ob ? ' data-scene="1"' : '') + '>⚔️ ' + (ob ? T('Onto the scene and fight') : T('Start the fight')) + '</button>' +
+          (ob ? '<button data-act="suPlace" data-id="' + esc(x.id) + '" data-part="foes">🗺 ' + T('Only onto the scene') + '</button><button data-act="suFight" data-id="' + esc(x.id) + '">⚔️ ' + T('Only into the fight') + '</button>' : '') + '</div>';
+      }
+      if (res.length) c += '<h4>🚨 ' + T('Reinforcements') + '</h4>' + (x.reserveNote ? '<p class="hint">' + esc(x.reserveNote) + '</p>' : '') + suRows(res) +
+        '<div class="btnrow"><button data-act="suReserve" data-id="' + esc(x.id) + '">＋ ' + (ob ? T('Onto the scene and into the fight') : T('Into the fight')) + '</button></div>';
+      if (x.shop) c += '<h4>🛒 ' + T('Shop') + '</h4><div class="btnrow"><button class="primary" data-act="suShop" data-id="' + esc(x.id) + '">🛒 ' + T('Open the shop') + '</button>' +
+        (x.shopNpc ? '<button' + (ob ? '' : ' disabled') + ' data-act="suPlace" data-id="' + esc(x.id) + '" data-part="npc">🗺 ' + T('The merchant onto the scene') + '</button>' : '') + '</div>' +
+        '<p class="hint">' + T('Players see every shop of the scenario in 🎒 Equipment → 🛒 Shops and buy with their own gold.') + '</p>';
+      if (x.tactics) c += '<p class="traits">🧠 <b>' + T('Tactics') + ':</b> ' + esc(x.tactics) + '</p>';
+      if (x.loot) c += '<p class="traits">💰 <b>' + T('Loot') + ':</b> ' + esc(x.loot) + '</p>';
+      return c + '</div>';
+    }).join('');
+    return h + '</div>';
+  };
+  // tokens for fight entries, linked to them at once (named like «Городовой с дубинкой 2»), visible: the fight is on
+  async function suTokens(entries) {
+    try { await U.obrPlace(entries.map(e => ({ name: e.name, m: Object.assign({}, monById(e.srcId) || {}, { name: e.name, cr: e.cr }), link: { k: 'mon', eid: e.id, n: e.name }, hidden: false }))); }
+    catch (er) { U.toast('⚠️ ' + esc(er.message || er)); }
+  }
+  // a new fight: the party + the enemies of the setup, initiative rolled; with scene = their tokens on the Owlbear map too
+  async function suStart(x, scene) {
+    const foes = suList(x.foes).filter(f => f.m); if (!foes.length) return;
+    if (S.combat.turn >= 0 && S.combat.list.length && !confirm(T('A fight is going on. Replace it with “{0}”?', x.name))) return;
+    S.combat = { list: [], round: 0, turn: -1, target: {} };
+    S.chars.filter(c => c.party).forEach(c => addPc(c.id));
+    foes.forEach(f => addMon(f.m, f.qty));
+    if (scene && OBR_ON()) await suTokens(S.combat.list.filter(e => e.type === 'mon'));
+    U.logAdd(T('Combat'), ['🎬 <b>' + esc((x.icon || '') + ' ' + x.name) + '</b>' + (x.tactics ? ' — <i>' + esc(x.tactics) + '</i>' : '')]);
+    S.combatTab = 'fight'; U.ACT.cbStart(); U.go('combat');
+  }
+  Object.assign(U.ACT, {
+    suJump: ds => { const el = document.getElementById('su-' + ds.id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+    suFight: ds => { const x = suById(ds.id); if (x) suStart(x, !!ds.scene); },
+    suReserve: async ds => {
+      const x = suById(ds.id); if (!x) return; const res = suList(x.reserve).filter(f => f.m); if (!res.length) return;
+      const act = S.combat.turn >= 0 ? S.combat.list[S.combat.turn] : null;
+      const n0 = S.combat.list.length; res.forEach(f => addMon(f.m, f.qty)); const fresh = S.combat.list.slice(n0);
+      if (act) fresh.forEach(e => { const b = E.modOf((e.abil || {}).DEX || 10); const r = E.rollD20(b, 'normal'); e.init = r.total; e.dex = b; e.econ = U.econNew(); e.move = { ft: 0 }; });
+      if (OBR_ON()) await suTokens(fresh);
+      sortCombat(); if (act) S.combat.turn = S.combat.list.indexOf(act);
+      U.saveCombat(); U.logAdd(T('Combat'), ['🚨 ' + T('Reinforcements') + ': ' + fresh.map(e => esc(e.name) + (e.init != null ? ' (' + T('Initiative') + ' ' + e.init + ')' : '')).join(', ')]); U.render();
+    },
+    suPlace: async ds => {
+      const x = suById(ds.id); if (!x || !OBR_ON()) return; let list = [];
+      if (ds.part === 'people') list = (x.people || []).map(n => ({ name: n, npc: true }));
+      else if (ds.part === 'npc') list = [{ name: x.shopNpc, npc: true }];
+      else suList(x.foes).filter(f => f.m).forEach(f => { for (let i = 0; i < f.qty; i++) list.push({ name: plainName(f.m.name) + (f.qty > 1 ? ' ' + (i + 1) : ''), m: f.m }); });
+      try { const n = await U.obrPlace(list); U.toast('🗺 ' + T('On the scene: {0}.', n) + (ds.part === 'foes' && U.obrHidden && U.obrHidden() ? ' (' + T('hidden — right click → Show') + ')' : '')); } catch (er) { U.toast('⚠️ ' + esc(er.message || er)); }
+    },
+    suShop: ds => { const x = suById(ds.id); if (!x || !SCN.active) return; S.itemsTab = 'shops'; S.shopSel = 'scn:' + SCN.active.id + ':' + x.shop; S.shopMode = 'buy'; U.go('items'); }
+  });
 })(window.UI);

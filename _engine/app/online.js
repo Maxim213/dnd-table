@@ -50,7 +50,11 @@
     pop.innerHTML = '<div class="popcard settings" role="dialog"><div class="ph"><h2>🔦 ' + T('Vision on this scene') + '</h2><button class="mini" data-act="closePop">✕</button></div>' +
       '<p class="hint">' + T('The players see only what their heroes see: walls block the view, the dark needs a light or darkvision. Seen places stay dim. You always see everything.') + '</p>' +
       '<div class="btnrow">' + VMODES.map(m => '<button class="' + (mode === m[0] ? 'primary' : '') + '" data-act="visMode" data-v="' + m[0] + '">' + m[1] + ' ' + T(m[2]) + '</button>').join('') + '</div>' +
-      '<h3>🔥 ' + T('Light of the heroes') + '</h3><p>' + heroes.map(c => { let dv = 0; try { dv = E.compute(c).darkvision || 0; } catch (e) {} return '<span class="chip small">' + esc(c.name) + ': ' + (c.light === 'lantern' ? '🏮' : c.light ? '🔥' : '—') + (dv ? ' · 👁 ' + dv + ' ' + T('ft') : '') + '</span>'; }).join(' ') + '</p>' +
+      '<h3>👁 ' + T('How far each hero sees') + '</h3><p class="hint">' + T('Empty = by the rules (dusk: 60 ft or more; dark: only light and darkvision). A number = exactly that many feet in dusk and dark, on every scene. Day: line of sight, no limit.') + '</p>' +
+      '<div class="visrows">' + heroes.map(c => { let dv = 0; try { dv = E.compute(c).darkvision || 0; } catch (e) {} const auto = mode === 'dark' ? Math.max(dv, ({ torch: 40, lantern: 60 })[c.light] || 0) : Math.max(60, dv, ({ torch: 40, lantern: 60 })[c.light] || 0);
+        return '<label class="visrow"><span><b>' + esc(c.name) + '</b> <small>' + (c.light === 'lantern' ? '🏮' : c.light ? '🔥' : '') + (dv ? ' 👁 ' + T('darkvision') + ' ' + dv : '') + '</small></span><input type="number" min="0" step="5" data-on="visFt" data-id="' + esc(c.id) + '" value="' + (Number(c.visFt) > 0 ? Number(c.visFt) : '') + '" placeholder="' + (mode === 'day' || mode === 'off' ? '∞' : auto) + '"> ' + T('ft') + '</label>'; }).join('') +
+      '<label class="visrow all"><span><b>' + T('All heroes') + '</b></span><input type="number" min="0" step="5" id="visAll" placeholder="60"> ' + T('ft') + ' <button class="mini" data-act="visAll">✓</button><button class="mini" data-act="visAuto" title="' + esc(T('Back to the rules for everyone')) + '">↺</button></label></div>' +
+      '<h3>🔥 ' + T('Light of the heroes') + '</h3>' +
       '<div class="btnrow"><button data-act="visTorch" data-v="torch">🔥 ' + T('Torches for everyone') + '</button><button data-act="visTorch" data-v="">⛔ ' + T('Put out all lights') + '</button><button data-act="visReset">🧹 ' + T('Forget what they explored') + '</button></div>' +
       '<p><label class="inl"><input type="checkbox" data-on="visPreview"' + (prev ? ' checked' : '') + '> ' + T('Show me the players\' fog (see-through)') + '</label></p>' +
       '<p class="hint">' + T('Walls: our generated maps have them. On your own map pictures the fog uses only the distance (or walls drawn with Owlbear\'s Dynamic Fog).') + '</p></div>';
@@ -59,6 +63,10 @@
   U.ACT.visionPop = () => visionPop();
   U.ACT.visMode = async ds => { try { const md = (await OBR.scene.getMetadata()) || {}; const v = Object.assign({ epoch: 0 }, md[VIS] || {}, { mode: ds.v }); await OBR.scene.setMetadata({ [VIS]: v }); visionPop(); } catch (e) { U.toast('⚠️ ' + esc(e.message || e)); } };
   U.ACT.visReset = async () => { try { const md = (await OBR.scene.getMetadata()) || {}; const v = Object.assign({ mode: 'off' }, md[VIS] || {}); v.epoch = (v.epoch || 0) + 1; await OBR.scene.setMetadata({ [VIS]: v }); U.toast('🧹 ' + T('The players forgot the map: only what they see now is open.')); } catch (e) {} };
+  const visSave = () => { U.saveChars(); if (window.__vision) setTimeout(window.__vision.soon, 400); }; // saveChars → obrstate → every player's fog
+  U.ON.visFt = el => { const c = U.byId(el.dataset.id); if (!c) return; const n = Math.max(0, Math.round(Number(el.value) || 0)); if (n) c.visFt = n; else delete c.visFt; visSave(); };
+  U.ACT.visAll = () => { const n = Math.max(0, Math.round(Number((document.getElementById('visAll') || {}).value) || 0)); if (!n) { U.toast(T('Type the feet first, e.g. 30.')); return; } (S.chars || []).filter(c => c.party !== false).forEach(c => { c.visFt = n; }); visSave(); visionPop(); };
+  U.ACT.visAuto = () => { (S.chars || []).forEach(c => { delete c.visFt; }); visSave(); visionPop(); };
   U.ACT.visTorch = ds => { (S.chars || []).filter(c => c.party !== false).forEach(c => { if (ds.v) c.light = ds.v; else delete c.light; }); U.saveChars(); visionPop(); };
   // ---------- 📜 handouts: the DM shows a picture or a letter to everybody (obr-bg.js receives, handout.html shows) ----------
   let hoImg = '';
@@ -190,7 +198,7 @@
     });
     const party = (S.chars || []).filter(c => c.party).slice(0, 8).map(c => {
       let d = null; try { d = E.compute(c); } catch (e) {}
-      return { id: c.id, n: c.name || T('Unnamed'), cls: c.classKey || '', lvl: c.level, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, cond: (c.conditions || []).slice(0, 6), dv: d ? d.darkvision || 0 : 0, lt: ({ torch: 40, lantern: 60, light: 40, daylight: 60 })[c.light] || 0 }; // dv / lt: darkvision and the light he carries (vision fog)
+      return { id: c.id, n: c.name || T('Unnamed'), cls: c.classKey || '', lvl: c.level, hp: d ? d.hpCur : 0, mx: d ? d.hpMax : 0, ac: d ? d.ac : 0, cond: (c.conditions || []).slice(0, 6), dv: d ? d.darkvision || 0 : 0, lt: ({ torch: 40, lantern: 60, light: 40, daylight: 60 })[c.light] || 0, vr: Number(c.visFt) > 0 ? Number(c.visFt) : 0 }; // vr: the DM set exactly how far he sees (🔦) // dv / lt: darkvision and the light he carries (vision fog)
     });
     // the DM's token window: what the one who acts now can do (attacks of a monster, or of the DM's own hero)
     let acts;
@@ -638,10 +646,29 @@
   }
 
   // the DM clicked in his own token window on the map: the one who acts now (a monster or his own hero) does it to the clicked target
+  // the DM is never stopped: a rule he breaks (too far for this attack) only goes to his own log (U.dmNote)
+  function monRange(a) {
+    if (!a || a.kind !== 'monster') return null;
+    const r = String((a.name.match(/\(([^)]*)\)\s*$/) || [])[1] || '');
+    const two = r.match(/(\d+)\s*\/\s*(\d+)/); if (two) return { k: 'ranged', n: +two[1], l: +two[2] };
+    const one = r.match(/(\d+)\s*(?:ft|фт)/i); return { k: 'melee', n: one ? +one[1] : 5 };
+  }
+  async function dmRangeNote(active, q) {
+    if (!q.tid || q.tid === '__all' || !OBR) return;
+    const cb = S.combat; const tg = cb.list.find(x => x.id === q.tid); if (!tg || tg.id === active.id) return;
+    let a = null, r = null;
+    if (active.type === 'mon') { a = (U.monActions ? U.monActions(active) : []).find(x => x.id === q.aid); r = monRange(a); }
+    else { const c = U.byId(active.charId); try { a = c && E.compute(c).actions.find(x => x.id === q.aid); } catch (e) {} r = rangeOf(a); }
+    if (!a || !r || a.heal) return;
+    const ft = await feetBetween(active, tg, null, q.ttok || null); if (ft == null) return;
+    const lim = r.k === 'ranged' ? r.l || r.n : r.n; const tn = U.cbTarget(tg) ? U.cbTarget(tg).name : tg.name;
+    if (ft > lim) U.dmNote(T('{0} → {1}: {2} ft away, «{3}» reaches {4} ft.', active.type === 'mon' ? active.name : (U.byId(active.charId) || {}).name || '', tn, ft, a.name, lim));
+  }
   function dmAct(q) {
     const cb = S.combat; if (!U.DM || !cb || cb.turn < 0) return '';
     if (q.kind === 'next') { U.ACT.cbNext(); return ''; }
     const active = cb.list[cb.turn]; if (!active) return '';
+    dmRangeNote(active, q).catch(() => {});
     if (q.tid) cb.target[active.id] = q.tid;
     S.mode = q.mode === 'adv' || q.mode === 'dis' ? q.mode : 'normal';
     U.ACT.cbAct({ aid: q.aid, quiet: 1 }); S.mode = 'normal'; U.saveCombat(); U.render(); return '';

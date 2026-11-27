@@ -65,7 +65,8 @@ export function startVision(OBR, o) {
         const l = it.layer === 'CHARACTER' && it.metadata && it.metadata[LINK]; if (!l || l.k !== 'pc') continue;
         const h = party.find(p => p.id === l.cid) || {};
         const dv = Number(h.dv) || 0, lt = Number(h.lt) || 0;
-        const ft = mode === 'day' ? Infinity : mode === 'dusk' ? Math.max(60, dv, lt) : Math.max(dv, lt, mult); // in the dark with nothing: just the squares next to you
+        const vr = Number(h.vr) || 0; // the DM typed how far this hero sees (🔦): exactly that, in dusk and dark
+        const ft = mode === 'day' ? Infinity : vr ? Math.max(vr, mult) : mode === 'dusk' ? Math.max(60, dv, lt) : Math.max(dv, lt, mult); // in the dark with nothing: just the squares next to you
         let c; try { c = (await OBR.scene.items.getItemBounds([it.id])).center; } catch (e) { c = it.position; }
         eyes.push({ x: c.x, y: c.y, cells: ft === Infinity ? 1e9 : Math.floor(ft / mult) });
       }
