@@ -523,6 +523,7 @@ window.UI = (function () {
       (U.scenarioBox ? U.scenarioBox() : '') +
       '<div class="setgrp"><h4>🌐 ' + T('Language') + '</h4><span class="langsw">' + ['en', 'ru'].map(l => '<button class="' + (U.LANG === l ? 'on' : '') + '" data-act="lang" data-v="' + l + '">' + (l === 'en' ? 'English' : 'Русский') + '</button>').join('') + '</span></div>' +
       '<p class="hint">' + T('Settings are saved on this computer only. Each player sets their own.') + '</p>' +
+      (window.APP_VER ? '<p class="hint">🔖 ' + T('App version') + ': ' + esc(window.APP_VER.replace(/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d).*/, '$3.$2.$1 $4:$5')) + '</p>' : '') +
       '<button class="primary" data-act="closePop">' + T('Done') + '</button></div>';
     pop.classList.add('show');
   }

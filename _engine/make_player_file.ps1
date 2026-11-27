@@ -23,3 +23,7 @@ foreach ($s in $scripts) {
 $out = Join-Path $game 'DnD_Game_PLAYERS.html'
 [System.IO.File]::WriteAllText($out, $html, (New-Object System.Text.UTF8Encoding $false))
 Write-Host "Done: $out"
+# the app version stamp: the online pages (index.html, bg.html, card.html) load files with ?v=<stamp>, so after an update Owlbear gets fresh code, not a cached copy
+$ver = Get-Date -Format 'yyyyMMddHHmmss'
+[System.IO.File]::WriteAllText((Join-Path $engine 'version.txt'), $ver, (New-Object System.Text.UTF8Encoding $false))
+Write-Host "Version: $ver"

@@ -1001,6 +1001,7 @@ window.DND_RU.UI = {
   'Bag': 'Инвентарь',
   'Card': 'Карточка',
   'Rolls': 'Броски',
+  'App version': 'Версия приложения',
   '🎲 Rolls': '🎲 Броски',
   'Your scenario «{0}» is an old copy without setups.': 'У тебя загружена старая копия сценария «{0}» — в ней ещё нет сетапов и лавки Шпильки.',
   'No campaign scenario is loaded yet.': 'Сценарий кампании ещё не загружен.',
